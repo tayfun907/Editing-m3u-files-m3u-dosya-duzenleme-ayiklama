@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>IPTV Liste Düzenleyici ve Oynatıcı</title>
+  <title>IPTV Liste Düzenleyici</title>
   <link href="https://vjs.zencdn.net/8.20.0/video-js.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <script src="https://vjs.zencdn.net/8.20.0/video.min.js"></script>
@@ -34,8 +34,13 @@
     #batch.visible{display:flex;}
     #batch label{font-weight:bold;flex-shrink:0;}
     #list{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:15px;padding-top:10px;flex-grow:1;overflow-y:auto;}
-    .card{background:#34495e;padding:15px;border-radius:6px;box-shadow:0 4px 6px rgba(0,0,0,.2);border-left:5px solid var(--pri);cursor:move;position:relative;}
-    .card.dragging{opacity:.5;}
+    .card{background:#34495e;padding:15px;border-radius:6px;box-shadow:0 4px 6px rgba(0,0,0,.2);border-left:5px solid var(--pri);cursor:move;position:relative;transition:all .2s;}
+    .card.dragging{opacity:.5;transform:scale(.98);}
+    .card.selected{background:#3e5770 !important;border-left:5px solid var(--acc) !important;}
+    .card .sel{width:20px;height:20px;cursor:pointer;}
+    .card-title{font-weight:600;font-size:14px;color:var(--sec);cursor:pointer;}
+    .cat-name{font-size:12px;color:#bdc3c7;cursor:pointer;}
+    .url-text{font-size:11px;word-break:break-all;color:#95a5a6;margin-top:5px;cursor:pointer;}
     #alert{position:fixed;top:0;left:0;right:0;padding:15px;text-align:center;color:#fff;font-weight:bold;z-index:1000;display:none;}
     #alert.success{background:#27ae60;}
     #alert.error{background:#c0392b;}
@@ -45,6 +50,21 @@
     #bad-content{max-height:70vh;overflow-y:auto;background:#2c3e50;padding:20px;border-radius:8px;max-width:600px;width:90%;}
     .bad-item{padding:8px 0;border-bottom:1px solid #444;}
     .bad-item:last-child{border:none;}
+    #category-filter option:checked { background: var(--acc); color: #000; }
+
+    @media (max-width: 768px) {
+      body { flex-direction: column; height: auto; min-height: 100vh; }
+      #editor-container { padding: 10px; }
+      #player-area { width: 100%; border-left: none; border-top: 2px solid #293a4a; padding: 10px; }
+      #player-container video { height: 220px; }
+      #list { grid-template-columns: 1fr; }
+      .toolbar, #controls { flex-direction: column; align-items: stretch; }
+      .toolbar input, .toolbar select, .toolbar button { width: 100%; margin-bottom: 8px; }
+      #controls .group { flex-direction: column; }
+      #controls input[type=file] { width: 100%; }
+      #batch { flex-direction: column; }
+      #batch input, #batch select, #batch button { width: 100%; margin-bottom: 8px; }
+    }
   </style>
 </head>
 <body>
@@ -102,392 +122,456 @@
   </div>
 
   <script>
-    const $ = id => document.getElementById(id);
-    const playerEl = $('player'), list = $('list'), batch = $('batch');
-    const selCount = $('sel-count'), moveToCat = $('move-to-cat'), newCatName = $('new-cat-name');
-    const modal = $('bad-modal'), badItems = $('bad-items'), badCount = $('bad-count');
-    let db, playlist = [], filtered = [], selected = [], badChannels = [], hls = null, player;
+    function $(id) { return document.getElementById(id); }
+    var db = null, playlist = [], filtered = [], selected = [], badChannels = [], hls = null, player;
+    var draggedUrl = null;
+    var currentFilter = { search: '', category: 'all' };
+    var isSaving = false;
 
-    const sanitize = s => s ? String(s).trim() : '';
-    const alert = (msg, type = 'info', dur = 3500) => {
-      const a = $('alert'); a.textContent = msg; a.className = type; a.style.display = 'block';
-      setTimeout(() => a.style.display = 'none', dur);
-    };
+    function sanitize(s) { return s ? String(s).trim() : ''; }
 
-    const parseM3U = data => {
-      const lines = data.split(/\r?\n/).map(l => l.trim());
-      const res = [];
-      let cur = null;
-      for (const l of lines) {
-        if (l.startsWith('#EXTINF:')) {
-          const tMatch = l.match(/,(.*)$/);
-          const title = tMatch ? tMatch[1] : 'Bilinmeyen';
-          const logo = l.match(/tvg-logo="([^"]+)"/)?.[1] || '';
-          const group = l.match(/group-title="([^"]+)"/)?.[1] || 'Diğer';
-          cur = { id: Date.now() + Math.random(), title: sanitize(title), logo: sanitize(logo), category: sanitize(group), url: '' };
-        } else if (cur && l && !l.startsWith('#')) {
-          cur.url = l;
-          if (cur.url) res.push(cur);
+    function alertMsg(msg, type, dur) {
+      if (!dur) dur = 3500;
+      var a = $('alert'); a.textContent = msg; a.className = type; a.style.display = 'block';
+      setTimeout(function() { a.style.display = 'none'; }, dur);
+    }
+
+    function parseM3U(data) {
+      if (data.charCodeAt(0) === 0xFEFF) data = data.slice(1);
+      if (data.indexOf('\uFEFF') === 0) data = data.slice(1);
+      var lines = data.split(/\r?\n/);
+      var res = [], cur = null;
+      for (var i = 0; i < lines.length; i++) {
+        var l = lines[i].trim();
+        if (!l) continue;
+        if (l.indexOf('#EXTM3U') === 0) continue;
+        if (l.indexOf('#EXTINF:') === 0) {
+          if (cur && !cur.url) cur = null;
+          var info = l.substring(8);
+          var titleMatch = info.match(/,(.*?)$/);
+          var title = titleMatch ? titleMatch[1].trim() : 'Bilinmeyen';
+          var logo = (info.match(/tvg-logo=["']([^"']*)["']/) || [])[1] || '';
+          var group = (info.match(/group-title=["']([^"']*)["']/) || [])[1] || 'Diğer';
+          var tvgName = (info.match(/tvg-name=["']([^"']*)["']/) || [])[1] || title;
+          cur = { id: Date.now() + Math.random(), title: sanitize(tvgName), logo: sanitize(logo), category: sanitize(group), url: '' };
+          continue;
+        }
+        if (cur && l.indexOf('#') !== 0) {
+          var url = l.trim();
+          if (url) { cur.url = url; res.push(cur); }
           cur = null;
         }
       }
       return res;
-    };
+    }
 
-    const toM3U = pl => {
-      let m = '#EXTM3U\n';
-      pl.forEach(c => m += `#EXTINF:-1 tvg-logo="${c.logo}" group-title="${c.category}",${c.title}\n${c.url}\n`);
+    function toM3U(pl) {
+      var m = '#EXTM3U\n';
+      for (var i = 0; i < pl.length; i++) {
+        var c = pl[i];
+        m += '#EXTINF:-1 tvg-logo="' + c.logo + '" group-title="' + c.category + '",' + c.title + '\n' + c.url + '\n';
+      }
       return m;
-    };
+    }
 
-    const initDB = () => new Promise((res, rej) => {
-      const r = indexedDB.open('IPTVDB', 2);
-      r.onupgradeneeded = e => {
-        const d = e.target.result;
+    function initDB(callback) {
+      var r = indexedDB.open('IPTVDB', 2);
+      r.onupgradeneeded = function(e) {
+        var d = e.target.result;
         if (!d.objectStoreNames.contains('pl')) d.createObjectStore('pl', {keyPath: 'id'});
       };
-      r.onsuccess = e => { db = e.target.result; res(); };
-      r.onerror = () => { alert('IndexedDB açılamadı!', 'error'); rej(); };
-    });
+      r.onsuccess = function(e) { db = e.target.result; if (callback) callback(); };
+      r.onerror = function() { alertMsg('IndexedDB açılamadı!', 'error'); if (callback) callback(); };
+    }
 
-    const save = async () => {
-      if (!db || !playlist.length) return;
-      const tx = db.transaction('pl', 'readwrite');
-      const st = tx.objectStore('pl');
-      await st.clear();
-      playlist.forEach(c => st.add(c));
-      await tx.done;
-      filtered = [...playlist];
-      updateCats();
-      render();
-      alert(`${playlist.length} kanal kaydedildi.`, 'success');
-    };
+    function save(callback, retries) {
+      if (!retries) retries = 3;
+      if (!db || !playlist.length || isSaving) { if (callback) callback(); return; }
+      isSaving = true;
+      var prevFilter = { search: currentFilter.search, category: currentFilter.category };
+      var chunkSize = 100;
+      var chunks = [];
+      for (var i = 0; i < playlist.length; i += chunkSize) chunks.push(playlist.slice(i, i + chunkSize));
+      var currentChunk = 0;
 
-    const load = async () => {
-      if (!db) return;
-      const tx = db.transaction('pl', 'readonly');
-      const st = tx.objectStore('pl');
-      const req = st.getAll();
-      req.onsuccess = () => {
-        playlist = req.result || [];
-        filtered = [...playlist];
-        updateCats();
-        render();
-      };
-    };
-
-    const clearAll = async () => {
-      if (!db) return;
-      const tx = db.transaction('pl', 'readwrite');
-      await tx.objectStore('pl').clear();
-      await tx.done;
-      playlist = filtered = [];
-      list.innerHTML = '';
-      updateCats();
-      alert('Liste silindi.', 'info');
-    };
-
-    const updateCats = () => {
-      const cats = [...new Set(playlist.map(c => c.category))].sort();
-      const catFilter = $('category-filter');
-      catFilter.innerHTML = '<option value="all">Tüm Kategoriler</option>';
-      moveToCat.innerHTML = '<option value="">Kategoriye Taşı…</option>';
-      cats.forEach(c => {
-        const o1 = new Option(c, c); catFilter.appendChild(o1);
-        const o2 = new Option(c, c); moveToCat.appendChild(o2);
-      });
-    };
-
-    const filter = () => {
-      const q = $('search-input').value.toLowerCase();
-      const cat = $('category-filter').value;
-      filtered = playlist.filter(c =>
-        (c.title.toLowerCase().includes(q) || c.url.toLowerCase().includes(q)) &&
-        (cat === 'all' || c.category === cat)
-      );
-      render();
-    };
-
-    const render = () => {
-      list.innerHTML = '';
-      if (!filtered.length) {
-        list.innerHTML = '<p style="grid-column:1/-1;text-align:center;color:#aaa;">Kanal bulunamadı.</p>';
-        return;
+      function saveNext() {
+        if (currentChunk >= chunks.length) {
+          updateCats();
+          currentFilter.search = prevFilter.search;
+          currentFilter.category = prevFilter.category;
+          $('search-input').value = prevFilter.search;
+          $('category-filter').value = prevFilter.category;
+          filter();
+          updateSelection();
+          alertMsg(playlist.length + ' kanal kaydedildi.', 'success');
+          isSaving = false;
+          if (callback) callback();
+          return;
+        }
+        var tx = db.transaction('pl', 'readwrite');
+        var st = tx.objectStore('pl');
+        if (currentChunk === 0) st.clear();
+        for (var j = 0; j < chunks[currentChunk].length; j++) st.add(chunks[currentChunk][j]);
+        tx.oncomplete = function() { currentChunk++; saveNext(); };
+        tx.onerror = function() {
+          if (retries > 0) setTimeout(function() { save(callback, retries - 1); }, 1000);
+          else { alertMsg('Kaydetme hatası.', 'error'); updateCats(); filter(); updateSelection(); isSaving = false; if (callback) callback(); }
+        };
       }
-      filtered.forEach(ch => list.appendChild(card(ch)));
-    };
+      saveNext();
+    }
 
-    // KANAL İSMİ - SINIRSIZ DÜZENLEME
-    const card = ch => {
-      const d = document.createElement('div');
-      d.className = 'card';
-      d.dataset.url = ch.url;
-      d.draggable = true;
-
-      d.innerHTML = `
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-          <input type="checkbox" class="sel" style="cursor:pointer;">
-          <img src="${ch.logo||'https://via.placeholder.com/40'}" onerror="this.src='https://via.placeholder.com/40'" width="40" height="40" style="border-radius:4px;">
-          <div style="flex:1;">
-            <div class="card-title" style="font-weight:600;font-size:14px;color:var(--sec);cursor:pointer;">${ch.title}</div>
-            <div style="font-size:12px;color:#bdc3c7;">${ch.category}</div>
-          </div>
-          <button onclick="play('${ch.url}')" style="padding:4px 8px;font-size:12px;background:#27ae60;color:#fff;border:none;border-radius:4px;cursor:pointer;">Oynat</button>
-        </div>
-        <div style="font-size:11px;word-break:break-all;color:#95a5a6;margin-top:5px;">${ch.url}</div>
-      `;
-
-      const checkbox = d.querySelector('.sel');
-      checkbox.checked = selected.includes(ch.url);
-      checkbox.onclick = e => { e.stopPropagation(); toggle(ch.url); };
-
-      const startEditing = (titleDiv) => {
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.value = ch.title;
-        input.style.width = '100%';
-        input.style.fontWeight = '600';
-        input.style.fontSize = '14px';
-        input.style.color = 'var(--sec)';
-        input.style.background = '#3a546b';
-        input.style.border = '2px dashed #3498db';
-        input.style.borderRadius = '3px';
-        input.style.padding = '2px 4px';
-        input.style.outline = 'none';
-
-        titleDiv.replaceWith(input);
-        input.focus();
-        input.select();
-
-        input.onkeydown = ev => {
-          if (ev.key === 'Enter') {
-            ev.preventDefault();
-            input.blur();
-          } else if (ev.key === 'Escape') {
-            input.value = ch.title;
-            input.blur();
-          }
-        };
-
-        input.onblur = () => {
-          const newTitle = sanitize(input.value);
-          const newDiv = document.createElement('div');
-          newDiv.className = 'card-title';
-          newDiv.style.cssText = 'font-weight:600;font-size:14px;color:var(--sec);cursor:pointer;';
-          newDiv.textContent = newTitle || ch.title;
-
-          newDiv.onclick = e => {
-            e.stopPropagation();
-            startEditing(newDiv);
-          };
-
-          if (newTitle && newTitle !== ch.title) {
-            ch.title = newTitle;
-            save();
-          }
-
-          input.replaceWith(newDiv);
-        };
+    function load() {
+      if (!db) return;
+      var tx = db.transaction('pl', 'readonly');
+      var st = tx.objectStore('pl');
+      var req = st.getAll();
+      req.onsuccess = function() {
+        playlist = req.result || [];
+        updateCats();
+        currentFilter = { search: '', category: 'all' };
+        $('search-input').value = '';
+        $('category-filter').value = 'all';
+        filter();
+        updateSelection();
       };
+    }
 
-      const titleDiv = d.querySelector('.card-title');
-      titleDiv.onclick = e => {
-        e.stopPropagation();
-        startEditing(titleDiv);
-      };
+    function clearAll() {
+      if (!db) return;
+      var tx = db.transaction('pl', 'readwrite');
+      var req = tx.objectStore('pl').clear();
+      req.onsuccess = function() { playlist = []; filtered = []; $('list').innerHTML = ''; updateCats(); alertMsg('Liste silindi.', 'info'); };
+      req.onerror = function() { alertMsg('Silme hatası.', 'error'); };
+    }
 
-      let src;
-      d.ondragstart = e => { src = ch.url; d.classList.add('dragging'); };
-      d.ondragover = e => e.preventDefault();
-      d.ondrop = e => {
-        e.preventDefault();
-        if (!src || src === ch.url) return;
-        const i1 = playlist.findIndex(c => c.url === src);
-        const i2 = playlist.findIndex(c => c.url === ch.url);
-        if (i1 === -1 || i2 === -1) return;
-        const [moved] = playlist.splice(i1, 1);
-        playlist.splice(i2, 0, moved);
-        save();
-      };
-      d.ondragend = () => d.classList.remove('dragging');
+    function updateCats() {
+      var cats = [];
+      for (var i = 0; i < playlist.length; i++) if (cats.indexOf(playlist[i].category) === -1) cats.push(playlist[i].category);
+      cats.sort();
+      var catFilter = $('category-filter'); catFilter.innerHTML = '<option value="all">Tüm Kategoriler</option>';
+      var moveToCat = $('move-to-cat'); moveToCat.innerHTML = '<option value="">Kategoriye Taşı…</option>';
+      for (var i = 0; i < cats.length; i++) { catFilter.appendChild(new Option(cats[i], cats[i])); moveToCat.appendChild(new Option(cats[i], cats[i])); }
+    }
 
-      return d;
-    };
+    function filter() {
+      var q = $('search-input').value.toLowerCase().trim();
+      var cat = $('category-filter').value;
+      currentFilter.search = q; currentFilter.category = cat;
+      filtered = [];
+      for (var i = 0; i < playlist.length; i++) {
+        var c = playlist[i];
+        if ((c.title.toLowerCase().indexOf(q) > -1 || c.url.toLowerCase().indexOf(q) > -1) && (cat === 'all' || c.category === cat)) filtered.push(c);
+      }
+      render(); updateSelection();
+    }
 
-    const toggle = url => {
-      const i = selected.indexOf(url);
-      if (i > -1) selected.splice(i, 1); else selected.push(url);
+    function render() {
+      var list = $('list'); list.innerHTML = '';
+      if (!filtered.length) { list.innerHTML = '<p style="grid-column:1/-1;text-align:center;color:#aaa;">Kanal bulunamadı.</p>'; return; }
+      for (var i = 0; i < filtered.length; i++) list.appendChild(card(filtered[i]));
       updateSelection();
-    };
+    }
 
-    const updateSelection = () => {
-      selCount.textContent = `${selected.length} kanal seçili`;
-      batch.classList.toggle('visible', selected.length > 0);
-      document.querySelectorAll('.sel').forEach(cb => {
-        const url = cb.closest('.card').dataset.url;
-        cb.checked = selected.includes(url);
-      });
-    };
+    function card(ch) {
+      var d = document.createElement('div'); d.className = 'card'; d.dataset.url = ch.url; d.draggable = true;
+      d.innerHTML = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">' +
+        '<input type="checkbox" class="sel">' +
+        '<img src="' + (ch.logo || 'https://via.placeholder.com/40') + '" onerror="this.src=\'https://via.placeholder.com/40\'" width="40" height="40" style="border-radius:4px;">' +
+        '<div style="flex:1;"><div class="card-title">' + ch.title + '</div><div class="cat-name">' + ch.category + '</div></div>' +
+        '<button onclick="play(\'' + ch.url + '\')" style="padding:4px 8px;font-size:12px;background:#27ae60;color:#fff;border:none;border-radius:4px;cursor:pointer;">Oynat</button>' +
+        '</div><div class="url-text">' + ch.url + '</div>';
+      var checkbox = d.querySelector('.sel'); checkbox.checked = selected.indexOf(ch.url) > -1;
+      checkbox.onclick = function(e) { e.stopPropagation(); toggle(ch.url); };
 
-    const selectAll = () => { selected = filtered.map(c => c.url); updateSelection(); };
-    const deselectAll = () => { selected = []; updateSelection(); };
+      var startEdit = function(el, field, callback) {
+        var input = document.createElement('input'); input.type = 'text'; input.value = ch[field];
+        input.style.cssText = 'width:100%;font-weight:600;font-size:14px;color:var(--sec);background:#3a546b;border:2px dashed #3498db;border-radius:3px;padding:2px 4px;outline:none;';
+        el.parentNode.replaceChild(input, el); input.focus(); input.select();
+        input.onkeydown = function(ev) { if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); } else if (ev.key === 'Escape') { input.value = ch[field]; input.blur(); } };
+        input.onblur = function() {
+          var val = sanitize(input.value); var span = document.createElement('div'); span.className = el.className; span.textContent = val || ch[field];
+          span.onclick = function(e) { e.stopPropagation(); startEdit(span, field, callback); };
+          if (val && val !== ch[field]) { ch[field] = val; if (callback) callback(); save(); }
+          input.parentNode.replaceChild(span, input);
+        };
+      };
+      d.querySelector('.card-title').onclick = function(e) { e.stopPropagation(); startEdit(this, 'title'); };
+      d.querySelector('.cat-name').onclick = function(e) { e.stopPropagation(); startEdit(this, 'category', updateCats); };
+      d.querySelector('.url-text').onclick = function(e) { e.stopPropagation(); startEdit(this, 'url'); };
 
-    const sort = dir => {
-      const asc = dir === 'az';
-      playlist.sort((a, b) => asc ? a.title.localeCompare(b.title) : b.title.localeCompare(a.title));
-      filtered = [...playlist];
-      render();
-    };
+      d.ondragstart = function(e) { draggedUrl = ch.url; d.classList.add('dragging'); };
+      d.ondragover = function(e) { e.preventDefault(); };
+      d.ondrop = function(e) {
+        e.preventDefault();
+        if (!draggedUrl || draggedUrl === ch.url || isSaving) return;
+        var from = -1, to = -1;
+        for (var i = 0; i < playlist.length; i++) { if (playlist[i].url === draggedUrl) from = i; if (playlist[i].url === ch.url) to = i; }
+        if (from === -1 || to === -1) return;
+        var moved = playlist.splice(from, 1)[0]; playlist.splice(to, 0, moved);
+        render(); save();
+      };
+      d.ondragend = function() { d.classList.remove('dragging'); };
+      return d;
+    }
 
-    const testURL = async url => {
-      try { await fetch(url, { method: 'HEAD', mode: 'no-cors', cache: 'no-store' }); return true; }
-      catch { return false; }
-    };
+    function toggle(url) { var i = selected.indexOf(url); if (i > -1) selected.splice(i, 1); else selected.push(url); updateSelection(); }
 
-    const checkBad = async () => {
-      if (!playlist.length) return alert('Liste boş', 'info');
+    function updateSelection() {
+      $('sel-count').textContent = selected.length + ' kanal seçili';
+      $('batch').classList.toggle('visible', selected.length > 0);
+      var cards = document.querySelectorAll('.card');
+      for (var i = 0; i < cards.length; i++) {
+        var card = cards[i]; var url = card.dataset.url; var isSel = selected.indexOf(url) > -1;
+        card.classList.toggle('selected', isSel); var cb = card.querySelector('.sel'); if (cb) cb.checked = isSel;
+      }
+    }
+
+    function selectAll() { selected = filtered.map(function(c) { return c.url; }); updateSelection(); }
+    function deselectAll() { selected = []; updateSelection(); }
+
+    function sort(dir) {
+      var asc = dir === 'az';
+      playlist.sort(function(a, b) { return asc ? a.title.localeCompare(b.title) : b.title.localeCompare(a.title); });
+      save();
+    }
+
+    function checkBad() {
+      if (!playlist.length) return alertMsg('Liste boş', 'info');
       $('checkBadBtn').disabled = true;
       $('checkBadBtn').textContent = 'Test ediliyor…';
       badChannels = [];
-      await Promise.all(playlist.map(async ch => { if (!(await testURL(ch.url))) badChannels.push(ch); }));
-      $('checkBadBtn').disabled = false;
-      $('checkBadBtn').textContent = 'Çalışmayanları Bul';
-      if (!badChannels.length) return alert('Tüm kanallar çalışıyor!', 'success');
-      badCount.textContent = badChannels.length; badItems.innerHTML = '';
-      badChannels.forEach(c => {
-        const div = document.createElement('div'); div.className='bad-item';
-        div.innerHTML = `<strong>${c.title}</strong> <small>(${c.category})</small><br><code style="font-size:10px;color:#bbb;">${c.url}</code>`;
-        badItems.appendChild(div);
-      });
-      modal.classList.add('visible');
-    };
+      var total = playlist.length;
+      var checked = 0;
 
-    const deleteBad = async () => {
-      playlist = playlist.filter(c => !badChannels.some(b => b.url === c.url));
-      filtered = [...playlist]; await save(); modal.classList.remove('visible');
-    };
+      function testNext(index) {
+        if (index >= total) {
+          $('checkBadBtn').disabled = false;
+          $('checkBadBtn').textContent = 'Çalışmayanları Bul';
+          if (!badChannels.length) return alertMsg('Tüm kanallar çalışıyor!', 'success');
+          $('bad-count').textContent = badChannels.length;
+          $('bad-items').innerHTML = '';
+          for (var i = 0; i < badChannels.length; i++) {
+            var c = badChannels[i];
+            var div = document.createElement('div'); div.className='bad-item';
+            div.innerHTML = '<strong>' + c.title + '</strong> <small>(' + c.category + ')</small><br><code style="font-size:10px;color:#bbb;">' + c.url + '</code>';
+            $('bad-items').appendChild(div);
+          }
+          $('bad-modal').classList.add('visible');
+          return;
+        }
 
-    const moveSelected = cat => {
-      if (!selected.length) return alert('Kanal seçin', 'info');
-      if (!cat) return alert('Kategori seçin', 'info');
-      playlist.forEach(c => { if (selected.includes(c.url)) c.category = cat; });
+        var url = playlist[index].url;
+        var xhr = new XMLHttpRequest();
+        xhr.open('HEAD', url, true);
+        xhr.timeout = 8000;
+        xhr.ontimeout = function() { check(url, false); };
+        xhr.onload = function() { check(url, this.status >= 200 && this.status < 400); };
+        xhr.onerror = function() { check(url, false); };
+        xhr.send();
+
+        function check(u, ok) {
+          checked++;
+          if (!ok) badChannels.push(playlist[index]);
+          $('checkBadBtn').textContent = 'Test: ' + checked + '/' + total;
+          testNext(index + 1);
+        }
+      }
+      testNext(0);
+    }
+
+    function deleteBad() {
+      var newList = [];
+      for (var i = 0; i < playlist.length; i++) {
+        var keep = true;
+        for (var j = 0; j < badChannels.length; j++) {
+          if (playlist[i].url === badChannels[j].url) { keep = false; break; }
+        }
+        if (keep) newList.push(playlist[i]);
+      }
+      playlist = newList;
+      save(function() { $('bad-modal').classList.remove('visible'); });
+    }
+
+    function moveSelected(cat) {
+      if (!selected.length) return alertMsg('Kanal seçin', 'info');
+      if (!cat) return alertMsg('Kategori seçin', 'info');
+      for (var i = 0; i < playlist.length; i++) if (selected.indexOf(playlist[i].url) > -1) playlist[i].category = cat;
       selected = []; save();
-    };
+    }
 
-    const createAndMove = () => {
-      const name = newCatName.value.trim();
-      if (!name) return alert('Kategori adı girin', 'error');
-      if (!selected.length) return alert('Kanal seçin', 'info');
-      playlist.forEach(c => { if (selected.includes(c.url)) c.category = name; });
-      newCatName.value = ''; selected = []; save();
-    };
+    function createAndMove() {
+      var name = $('new-cat-name').value.trim();
+      if (!name) return alertMsg('Kategori adı girin', 'error');
+      if (!selected.length) return alertMsg('Kanal seçin', 'info');
+      for (var i = 0; i < playlist.length; i++) if (selected.indexOf(playlist[i].url) > -1) playlist[i].category = name;
+      $('new-cat-name').value = ''; selected = []; save();
+    }
 
-    const setupPlayer = () => {
-      player = videojs(playerEl, { html5: { hls: { withCredentials: false } }, autoplay: false, controls: true, fluid: true });
-      player.on('error', () => { $('video-resolution').textContent = 'Çözünürlük: Hata'; });
-    };
+    function setupPlayer() {
+      player = videojs($('player'), {
+        html5: { hls: { withCredentials: false } },
+        autoplay: false,
+        controls: true,
+        fluid: true,
+        playbackRates: [0.5, 1, 1.25, 1.5, 2]
+      });
+      player.on('error', function() { $('video-resolution').textContent = 'Çözünürlük: Hata'; });
+      player.on('canplay', updateResolution);
+      player.on('loadedmetadata', updateResolution);
+    }
 
-    window.play = url => {
-      const ch = playlist.find(c => c.url === url); if (!ch) return;
+    function updateResolution() {
+      player.ready(function() {
+        var video = player.tech_.el_;
+        if (video && video.videoWidth && video.videoHeight) {
+          $('video-resolution').textContent = 'Çözünürlük: ' + video.videoWidth + 'x' + video.videoHeight;
+        } else {
+          $('video-resolution').textContent = 'Çözünürlük: Yükleniyor...';
+          setTimeout(updateResolution, 1000);
+        }
+      });
+    }
+
+    window.play = function(url) {
+      var ch = null;
+      for (var i = 0; i < playlist.length; i++) {
+        if (playlist[i].url === url) { ch = playlist[i]; break; }
+      }
+      if (!ch) return;
+
       $('current-channel').textContent = ch.title;
+      $('video-resolution').textContent = 'Çözünürlük: Yükleniyor...';
+
       if (hls) { hls.destroy(); hls = null; }
-      if (Hls.isSupported() && url.includes('.m3u8')) {
-        hls = new Hls(); hls.loadSource(url); hls.attachMedia(playerEl);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => player.play());
-      } else { player.src({ src: url, type: 'video/mp4' }); player.play(); }
+
+      player.ready(function() {
+        player.reset();
+
+        if (Hls.isSupported() && (url.indexOf('.m3u8') > -1 || url.toLowerCase().indexOf('m3u8') > -1)) {
+          hls = new Hls({ enableWorker: true });
+          hls.loadSource(url);
+          hls.attachMedia(player.tech_.el_);
+
+          hls.on(Hls.Events.MANIFEST_PARSED, function() {
+            tryPlay();
+          });
+
+          hls.on(Hls.Events.ERROR, function(event, data) {
+            if (data.fatal) {
+              alertMsg('HLS hatası, MP4 deneniyor...', 'info');
+              fallbackToMP4(url);
+            }
+          });
+
+        } else {
+          fallbackToMP4(url);
+        }
+      });
     };
 
-    $('file-upload').addEventListener('change', () => {
-      const file = $('file-upload').files[0];
-      if (!file) { $('start-upload').style.display = 'none'; return; }
-      const ext = file.name.split('.').pop().toLowerCase();
-      if (!['m3u', 'm3u8'].includes(ext)) {
-        alert('Lütfen .m3u veya .m3u8 dosyası seçin!', 'error');
-        $('file-upload').value = ''; $('start-upload').style.display = 'none'; return;
-      }
-      $('start-upload').style.display = 'inline-block';
-      $('start-upload').textContent = `${file.name} → Yükle`;
-    });
-
-    $('start-upload').addEventListener('click', async () => {
-      const file = $('file-upload').files[0];
-      if (!file) return;
-      $('start-upload').disabled = true;
-      $('start-upload').textContent = 'Yükleniyor...';
-      try {
-        const data = await new Promise((res, rej) => {
-          const reader = new FileReader();
-          reader.onload = e => res(e.target.result);
-          reader.onerror = () => rej(new Error('Dosya okunamadı'));
-          reader.readAsText(file);
+    function tryPlay() {
+      var playPromise = player.play();
+      if (playPromise !== undefined) {
+        playPromise.then(function() {}).catch(function() {
+          alertMsg('Oynatma için lütfen oynat tuşuna basın.', 'info', 5000);
         });
-        if (!data.trim()) throw new Error('Dosya boş');
-        const parsed = parseM3U(data);
-        if (!parsed.length) throw new Error('Hiç kanal bulunamadı');
-        playlist = parsed;
-        await save();
-      } catch (err) {
-        alert(`Yükleme hatası: ${err.message}`, 'error');
-      } finally {
-        $('file-upload').value = '';
-        $('start-upload').style.display = 'none';
-        $('start-upload').disabled = false;
       }
-    });
+    }
 
-    $('submitUrlBtn').addEventListener('click', async () => {
-      const url = $('playlist-url').value.trim();
-      if (!url) return alert('URL girin', 'error');
-      try {
-        alert('URL yükleniyor...', 'info');
-        const response = await fetch(url);
-        if (!response.ok) throw new Error('Bağlantı hatası');
-        const text = await response.text();
-        const parsed = parseM3U(text);
-        if (!parsed.length) throw new Error('Kanal yok');
+    function fallbackToMP4(url) {
+      player.src({ src: url, type: 'video/mp4' });
+      tryPlay();
+    }
+
+    $('file-upload').onchange = function() {
+      var file = this.files[0];
+      if (!file) { $('start-upload').style.display = 'none'; return; }
+      var ext = file.name.split('.').pop().toLowerCase();
+      if (['m3u', 'm3u8'].indexOf(ext) === -1) { alertMsg('Lütfen .m3u veya .m3u8 dosyası seçin!', 'error'); this.value = ''; $('start-upload').style.display = 'none'; return; }
+      $('start-upload').style.display = 'inline-block';
+      $('start-upload').textContent = file.name + ' → Yükle';
+    };
+
+    $('start-upload').onclick = function() {
+      var file = $('file-upload').files[0];
+      if (!file) return;
+      this.disabled = true;
+      this.textContent = 'Yükleniyor...';
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        var data = e.target.result;
+        if (!data.trim()) { alertMsg('Dosya boş', 'error'); return done(); }
+        var parsed = parseM3U(data);
+        if (!parsed.length) { alertMsg('Hiç kanal bulunamadı', 'error'); return done(); }
+        if (parsed.length > 500 && !confirm(parsed.length + ' kanal. Yüklemek uzun sürebilir, devam?')) return done();
         playlist = parsed;
-        await save();
-        $('playlist-url').value = '';
-      } catch (err) {
-        alert(`URL hatası: ${err.message}`, 'error');
-      }
-    });
+        save(function() { alertMsg(parsed.length + ' kanal yüklendi!', 'success'); done(); });
+      };
+      reader.onerror = function() { alertMsg('Dosya okunamadı', 'error'); done(); };
+      reader.readAsText(file, 'UTF-8');
+      function done() { $('file-upload').value = ''; $('start-upload').style.display = 'none'; $('start-upload').disabled = false; $('start-upload').textContent = 'Yükle'; }
+    };
+
+    $('submitUrlBtn').onclick = function() {
+      var url = $('playlist-url').value.trim();
+      if (!url) return alertMsg('URL girin', 'error');
+      if (!/^https?:\/\//i.test(url)) return alertMsg('Sadece HTTP/HTTPS URL!', 'error');
+      alertMsg('URL yükleniyor...', 'info');
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', url, true);
+      xhr.onload = function() {
+        if (this.status >= 200 && this.status < 400) {
+          var parsed = parseM3U(this.responseText);
+          if (!parsed.length) return alertMsg('Kanal yok', 'error');
+          if (parsed.length > 500 && !confirm(parsed.length + ' kanal. Devam?')) return;
+          playlist = parsed;
+          save(function() { $('playlist-url').value = ''; });
+        } else alertMsg('Bağlantı hatası: ' + this.status, 'error');
+      };
+      xhr.onerror = function() { alertMsg('Ağ hatası', 'error'); };
+      xhr.send();
+    };
 
     $('selectAllBtn').onclick = selectAll;
     $('deselectAllBtn').onclick = deselectAll;
-    $('sortAZ').onclick = () => sort('az');
-    $('sortZA').onclick = () => sort('za');
+    $('sortAZ').onclick = function() { sort('az'); };
+    $('sortZA').onclick = function() { sort('za'); };
     $('checkBadBtn').onclick = checkBad;
     $('confirm-delete-bad').onclick = deleteBad;
-    $('cancel-delete-bad').onclick = () => modal.classList.remove('visible');
-    $('exportAllBtn').onclick = () => {
-      if (!playlist.length) return alert('Liste boş', 'error');
-      const blob = new Blob([toM3U(playlist)], { type: 'text/plain' });
-      const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-      a.download = 'iptv_liste.m3u'; a.click();
+    $('cancel-delete-bad').onclick = function() { $('bad-modal').classList.remove('visible'); };
+    $('exportAllBtn').onclick = function() {
+      if (!playlist.length) return alertMsg('Liste boş', 'error');
+      var blob = new Blob([toM3U(playlist)], { type: 'text/plain' });
+      var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'iptv_liste.m3u'; a.click();
     };
-    $('deleteAllBtn').onclick = () => confirm('Tüm liste silinsin mi?') && clearAll();
-    $('exportSelBtn').onclick = () => {
-      const sel = playlist.filter(c => selected.includes(c.url));
-      if (!sel.length) return alert('Seçili yok', 'info');
-      const blob = new Blob([toM3U(sel)], { type: 'text/plain' });
-      const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-      a.download = 'secili.m3u'; a.click();
+    $('deleteAllBtn').onclick = function() { if (confirm('Tüm liste silinsin mi?')) clearAll(); };
+    $('exportSelBtn').onclick = function() {
+      var sel = [];
+      for (var i = 0; i < playlist.length; i++) if (selected.indexOf(playlist[i].url) > -1) sel.push(playlist[i]);
+      if (!sel.length) return alertMsg('Seçili yok', 'info');
+      var blob = new Blob([toM3U(sel)], { type: 'text/plain' });
+      var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'secili.m3u'; a.click();
     };
-    $('deleteSelBtn').onclick = () => {
-      if (!selected.length) return alert('Seçili yok', 'info');
+    $('deleteSelBtn').onclick = function() {
+      if (!selected.length) return alertMsg('Seçili yok', 'info');
       if (!confirm('Seçili kanallar silinsin mi?')) return;
-      playlist = playlist.filter(c => !selected.includes(c.url));
-      selected = []; save(); batch.classList.remove('visible');
+      var newList = [];
+      for (var i = 0; i < playlist.length; i++) if (selected.indexOf(playlist[i].url) === -1) newList.push(playlist[i]);
+      playlist = newList; selected = [];
+      save(function() { $('batch').classList.remove('visible'); });
     };
-    $('moveBtn').onclick = () => moveSelected(moveToCat.value);
+    $('moveBtn').onclick = function() { moveSelected($('move-to-cat').value); };
     $('createAndMoveBtn').onclick = createAndMove;
     $('search-input').oninput = filter;
     $('category-filter').onchange = filter;
 
-    window.addEventListener('load', async () => {
-      await initDB(); setupPlayer(); await load();
-    });
+    window.onload = function() {
+      initDB(function() {
+        setupPlayer();
+        load();
+      });
+    };
   </script>
 </body>
 </html>
