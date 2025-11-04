@@ -217,7 +217,7 @@
       filtered.forEach(ch => list.appendChild(card(ch)));
     };
 
-    // KANAL İSMİ DÜZENLEME - %100 ÇALIŞIYOR
+    // KANAL İSMİ - SINIRSIZ DÜZENLEME
     const card = ch => {
       const d = document.createElement('div');
       d.className = 'card';
@@ -241,11 +241,7 @@
       checkbox.checked = selected.includes(ch.url);
       checkbox.onclick = e => { e.stopPropagation(); toggle(ch.url); };
 
-      const titleDiv = d.querySelector('.card-title');
-      let originalTitle = ch.title;
-
-      titleDiv.onclick = e => {
-        e.stopPropagation();
+      const startEditing = (titleDiv) => {
         const input = document.createElement('input');
         input.type = 'text';
         input.value = ch.title;
@@ -268,7 +264,7 @@
             ev.preventDefault();
             input.blur();
           } else if (ev.key === 'Escape') {
-            input.value = originalTitle;
+            input.value = ch.title;
             input.blur();
           }
         };
@@ -277,9 +273,13 @@
           const newTitle = sanitize(input.value);
           const newDiv = document.createElement('div');
           newDiv.className = 'card-title';
-          newDiv.style.cssText = titleDiv.style.cssText;
-          newDiv.textContent = newTitle || originalTitle;
-          newDiv.onclick = titleDiv.onclick;
+          newDiv.style.cssText = 'font-weight:600;font-size:14px;color:var(--sec);cursor:pointer;';
+          newDiv.textContent = newTitle || ch.title;
+
+          newDiv.onclick = e => {
+            e.stopPropagation();
+            startEditing(newDiv);
+          };
 
           if (newTitle && newTitle !== ch.title) {
             ch.title = newTitle;
@@ -288,6 +288,12 @@
 
           input.replaceWith(newDiv);
         };
+      };
+
+      const titleDiv = d.querySelector('.card-title');
+      titleDiv.onclick = e => {
+        e.stopPropagation();
+        startEditing(titleDiv);
       };
 
       let src;
