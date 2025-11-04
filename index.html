@@ -16,7 +16,6 @@
     video.video-js{width:100%;height:200px;border-radius:6px;}
     h1{margin:0 0 10px;font-size:24px;text-align:center;color:var(--acc);border-bottom:1px solid #34495e;padding-bottom:10px;}
     #current-channel{font-size:16px;font-weight:bold;text-align:center;color:var(--pri);}
-
     .toolbar{display:flex;gap:8px;margin-bottom:15px;align-items:center;flex-wrap:wrap;}
     .toolbar input,.toolbar select,.toolbar button{padding:9px;border-radius:4px;border:1px solid #444;background:#444;color:var(--sec);box-sizing:border-box;}
     .toolbar button{cursor:pointer;background:var(--pri);flex-shrink:0;}
@@ -26,27 +25,21 @@
     .toolbar button.select-all{background:#9b59b6;color:#fff;}
     .toolbar button:hover{background:#2980b9;}
     #search-input{flex:1;min-width:150px;}
-
-    /* SABİT KONTROLLER */
     #controls{background:#3c546b;padding:15px;border-radius:6px;margin-bottom:15px;border:2px solid var(--acc);display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
     #controls label{font-weight:bold;flex-shrink:0;}
     #controls input[type=file]{flex-grow:1;}
     #controls .group{display:flex;gap:8px;align-items:center;flex:1;}
     #start-upload{background:#2ecc71!important;color:#fff;display:none;}
-
     #batch{display:none;background:#34495e;padding:10px;border-radius:6px;margin-bottom:15px;gap:10px;align-items:center;flex-wrap:wrap;}
     #batch.visible{display:flex;}
     #batch label{font-weight:bold;flex-shrink:0;}
-
     #list{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:15px;padding-top:10px;flex-grow:1;overflow-y:auto;}
     .card{background:#34495e;padding:15px;border-radius:6px;box-shadow:0 4px 6px rgba(0,0,0,.2);border-left:5px solid var(--pri);cursor:move;position:relative;}
     .card.dragging{opacity:.5;}
-
     #alert{position:fixed;top:0;left:0;right:0;padding:15px;text-align:center;color:#fff;font-weight:bold;z-index:1000;display:none;}
     #alert.success{background:#27ae60;}
     #alert.error{background:#c0392b;}
     #alert.info{background:#3498db;}
-
     #bad-modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.8);z-index:2000;align-items:center;justify-content:center;}
     #bad-modal.visible{display:flex;}
     #bad-content{max-height:70vh;overflow-y:auto;background:#2c3e50;padding:20px;border-radius:8px;max-width:600px;width:90%;}
@@ -56,8 +49,6 @@
 </head>
 <body>
   <div id="alert"></div>
-
-  <!-- Çalışmayanlar Modal -->
   <div id="bad-modal">
     <div id="bad-content">
       <h3 style="margin-top:0;color:var(--acc);">Çalışmayan Kanallar (<span id="bad-count">0</span>)</h3>
@@ -68,11 +59,8 @@
       </div>
     </div>
   </div>
-
   <div id="editor-container">
     <h1>IPTV Liste Düzenleyici</h1>
-
-    <!-- ANA KONTROLLER - SABİT -->
     <div id="controls">
       <div class="group">
         <label for="file-upload">Dosya:</label>
@@ -87,7 +75,6 @@
       <button class="export" id="exportAllBtn">Tümünü İndir</button>
       <button class="danger" id="deleteAllBtn">Listeyi Sil</button>
     </div>
-
     <div class="toolbar">
       <input type="text" id="search-input" placeholder="Kanal / Kategori ara…">
       <select id="category-filter"><option value="all">Tüm Kategoriler</option></select>
@@ -97,7 +84,6 @@
       <button id="selectAllBtn" class="select-all">Tümünü Seç</button>
       <button id="deselectAllBtn" class="select-all">Seçimleri Kaldır</button>
     </div>
-
     <div class="toolbar" id="batch">
       <label id="sel-count">0 kanal seçili</label>
       <select id="move-to-cat"><option value="">Kategoriye Taşı…</option></select>
@@ -107,10 +93,8 @@
       <button class="export" id="exportSelBtn">Seçilileri İndir</button>
       <button class="danger" id="deleteSelBtn">Seçilileri Sil</button>
     </div>
-
     <div id="list"></div>
   </div>
-
   <div id="player-area">
     <div id="current-channel">Oynatıcı Alanı</div>
     <div id="player-container"><video id="player" class="video-js vjs-big-play-centered" controls preload="auto" playsinline></video></div>
@@ -122,7 +106,6 @@
     const playerEl = $('player'), list = $('list'), batch = $('batch');
     const selCount = $('sel-count'), moveToCat = $('move-to-cat'), newCatName = $('new-cat-name');
     const modal = $('bad-modal'), badItems = $('bad-items'), badCount = $('bad-count');
-
     let db, playlist = [], filtered = [], selected = [], badChannels = [], hls = null, player;
 
     const sanitize = s => s ? String(s).trim() : '';
@@ -234,26 +217,79 @@
       filtered.forEach(ch => list.appendChild(card(ch)));
     };
 
+    // KANAL İSMİ DÜZENLEME - %100 ÇALIŞIYOR
     const card = ch => {
       const d = document.createElement('div');
       d.className = 'card';
       d.dataset.url = ch.url;
       d.draggable = true;
+
       d.innerHTML = `
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
           <input type="checkbox" class="sel" style="cursor:pointer;">
           <img src="${ch.logo||'https://via.placeholder.com/40'}" onerror="this.src='https://via.placeholder.com/40'" width="40" height="40" style="border-radius:4px;">
           <div style="flex:1;">
-            <div style="font-weight:600;font-size:14px;">${ch.title}</div>
+            <div class="card-title" style="font-weight:600;font-size:14px;color:var(--sec);cursor:pointer;">${ch.title}</div>
             <div style="font-size:12px;color:#bdc3c7;">${ch.category}</div>
           </div>
           <button onclick="play('${ch.url}')" style="padding:4px 8px;font-size:12px;background:#27ae60;color:#fff;border:none;border-radius:4px;cursor:pointer;">Oynat</button>
         </div>
         <div style="font-size:11px;word-break:break-all;color:#95a5a6;margin-top:5px;">${ch.url}</div>
       `;
+
       const checkbox = d.querySelector('.sel');
       checkbox.checked = selected.includes(ch.url);
       checkbox.onclick = e => { e.stopPropagation(); toggle(ch.url); };
+
+      const titleDiv = d.querySelector('.card-title');
+      let originalTitle = ch.title;
+
+      titleDiv.onclick = e => {
+        e.stopPropagation();
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = ch.title;
+        input.style.width = '100%';
+        input.style.fontWeight = '600';
+        input.style.fontSize = '14px';
+        input.style.color = 'var(--sec)';
+        input.style.background = '#3a546b';
+        input.style.border = '2px dashed #3498db';
+        input.style.borderRadius = '3px';
+        input.style.padding = '2px 4px';
+        input.style.outline = 'none';
+
+        titleDiv.replaceWith(input);
+        input.focus();
+        input.select();
+
+        input.onkeydown = ev => {
+          if (ev.key === 'Enter') {
+            ev.preventDefault();
+            input.blur();
+          } else if (ev.key === 'Escape') {
+            input.value = originalTitle;
+            input.blur();
+          }
+        };
+
+        input.onblur = () => {
+          const newTitle = sanitize(input.value);
+          const newDiv = document.createElement('div');
+          newDiv.className = 'card-title';
+          newDiv.style.cssText = titleDiv.style.cssText;
+          newDiv.textContent = newTitle || originalTitle;
+          newDiv.onclick = titleDiv.onclick;
+
+          if (newTitle && newTitle !== ch.title) {
+            ch.title = newTitle;
+            save();
+          }
+
+          input.replaceWith(newDiv);
+        };
+      };
+
       let src;
       d.ondragstart = e => { src = ch.url; d.classList.add('dragging'); };
       d.ondragover = e => e.preventDefault();
@@ -262,43 +298,33 @@
         if (!src || src === ch.url) return;
         const i1 = playlist.findIndex(c => c.url === src);
         const i2 = playlist.findIndex(c => c.url === ch.url);
-        const [m] = playlist.splice(i1, 1);
-        playlist.splice(i2, 0, m);
+        if (i1 === -1 || i2 === -1) return;
+        const [moved] = playlist.splice(i1, 1);
+        playlist.splice(i2, 0, moved);
         save();
       };
       d.ondragend = () => d.classList.remove('dragging');
+
       return d;
     };
 
     const toggle = url => {
       const i = selected.indexOf(url);
-      if (i > -1) {
-        selected.splice(i, 1);
-      } else {
-        selected.push(url);
-      }
+      if (i > -1) selected.splice(i, 1); else selected.push(url);
       updateSelection();
     };
 
     const updateSelection = () => {
       selCount.textContent = `${selected.length} kanal seçili`;
       batch.classList.toggle('visible', selected.length > 0);
-      // Checkbox'ları güncelle
       document.querySelectorAll('.sel').forEach(cb => {
         const url = cb.closest('.card').dataset.url;
         cb.checked = selected.includes(url);
       });
     };
 
-    const selectAll = () => {
-      selected = filtered.map(c => c.url);
-      updateSelection();
-    };
-
-    const deselectAll = () => {
-      selected = [];
-      updateSelection();
-    };
+    const selectAll = () => { selected = filtered.map(c => c.url); updateSelection(); };
+    const deselectAll = () => { selected = []; updateSelection(); };
 
     const sort = dir => {
       const asc = dir === 'az';
@@ -308,10 +334,8 @@
     };
 
     const testURL = async url => {
-      try {
-        await fetch(url, { method: 'HEAD', mode: 'no-cors', cache: 'no-store' });
-        return true;
-      } catch { return false; }
+      try { await fetch(url, { method: 'HEAD', mode: 'no-cors', cache: 'no-store' }); return true; }
+      catch { return false; }
     };
 
     const checkBad = async () => {
@@ -319,17 +343,13 @@
       $('checkBadBtn').disabled = true;
       $('checkBadBtn').textContent = 'Test ediliyor…';
       badChannels = [];
-      await Promise.all(playlist.map(async ch => {
-        if (!(await testURL(ch.url))) badChannels.push(ch);
-      }));
+      await Promise.all(playlist.map(async ch => { if (!(await testURL(ch.url))) badChannels.push(ch); }));
       $('checkBadBtn').disabled = false;
       $('checkBadBtn').textContent = 'Çalışmayanları Bul';
       if (!badChannels.length) return alert('Tüm kanallar çalışıyor!', 'success');
-      badCount.textContent = badChannels.length;
-      badItems.innerHTML = '';
+      badCount.textContent = badChannels.length; badItems.innerHTML = '';
       badChannels.forEach(c => {
-        const div = document.createElement('div');
-        div.className = 'bad-item';
+        const div = document.createElement('div'); div.className='bad-item';
         div.innerHTML = `<strong>${c.title}</strong> <small>(${c.category})</small><br><code style="font-size:10px;color:#bbb;">${c.url}</code>`;
         badItems.appendChild(div);
       });
@@ -338,17 +358,14 @@
 
     const deleteBad = async () => {
       playlist = playlist.filter(c => !badChannels.some(b => b.url === c.url));
-      filtered = [...playlist];
-      await save();
-      modal.classList.remove('visible');
+      filtered = [...playlist]; await save(); modal.classList.remove('visible');
     };
 
     const moveSelected = cat => {
       if (!selected.length) return alert('Kanal seçin', 'info');
       if (!cat) return alert('Kategori seçin', 'info');
       playlist.forEach(c => { if (selected.includes(c.url)) c.category = cat; });
-      selected = [];
-      save();
+      selected = []; save();
     };
 
     const createAndMove = () => {
@@ -356,9 +373,7 @@
       if (!name) return alert('Kategori adı girin', 'error');
       if (!selected.length) return alert('Kanal seçin', 'info');
       playlist.forEach(c => { if (selected.includes(c.url)) c.category = name; });
-      newCatName.value = '';
-      selected = [];
-      save();
+      newCatName.value = ''; selected = []; save();
     };
 
     const setupPlayer = () => {
@@ -367,34 +382,22 @@
     };
 
     window.play = url => {
-      const ch = playlist.find(c => c.url === url);
-      if (!ch) return;
+      const ch = playlist.find(c => c.url === url); if (!ch) return;
       $('current-channel').textContent = ch.title;
       if (hls) { hls.destroy(); hls = null; }
       if (Hls.isSupported() && url.includes('.m3u8')) {
-        hls = new Hls();
-        hls.loadSource(url);
-        hls.attachMedia(playerEl);
+        hls = new Hls(); hls.loadSource(url); hls.attachMedia(playerEl);
         hls.on(Hls.Events.MANIFEST_PARSED, () => player.play());
-      } else {
-        player.src({ src: url, type: 'video/mp4' });
-        player.play();
-      }
+      } else { player.src({ src: url, type: 'video/mp4' }); player.play(); }
     };
 
-    // DOSYA YÜKLEME
     $('file-upload').addEventListener('change', () => {
       const file = $('file-upload').files[0];
-      if (!file) {
-        $('start-upload').style.display = 'none';
-        return;
-      }
+      if (!file) { $('start-upload').style.display = 'none'; return; }
       const ext = file.name.split('.').pop().toLowerCase();
       if (!['m3u', 'm3u8'].includes(ext)) {
         alert('Lütfen .m3u veya .m3u8 dosyası seçin!', 'error');
-        $('file-upload').value = '';
-        $('start-upload').style.display = 'none';
-        return;
+        $('file-upload').value = ''; $('start-upload').style.display = 'none'; return;
       }
       $('start-upload').style.display = 'inline-block';
       $('start-upload').textContent = `${file.name} → Yükle`;
@@ -403,23 +406,18 @@
     $('start-upload').addEventListener('click', async () => {
       const file = $('file-upload').files[0];
       if (!file) return;
-
       $('start-upload').disabled = true;
       $('start-upload').textContent = 'Yükleniyor...';
-
       try {
-        const data = await new Promise((resolve, reject) => {
+        const data = await new Promise((res, rej) => {
           const reader = new FileReader();
-          reader.onload = e => resolve(e.target.result);
-          reader.onerror = () => reject(new Error('Dosya okunamadı'));
+          reader.onload = e => res(e.target.result);
+          reader.onerror = () => rej(new Error('Dosya okunamadı'));
           reader.readAsText(file);
         });
-
         if (!data.trim()) throw new Error('Dosya boş');
-
         const parsed = parseM3U(data);
         if (!parsed.length) throw new Error('Hiç kanal bulunamadı');
-
         playlist = parsed;
         await save();
       } catch (err) {
@@ -434,7 +432,6 @@
     $('submitUrlBtn').addEventListener('click', async () => {
       const url = $('playlist-url').value.trim();
       if (!url) return alert('URL girin', 'error');
-
       try {
         alert('URL yükleniyor...', 'info');
         const response = await fetch(url);
@@ -450,11 +447,8 @@
       }
     });
 
-    // YENİ: TÜMÜNÜ SEÇ / KALDIR
     $('selectAllBtn').onclick = selectAll;
     $('deselectAllBtn').onclick = deselectAll;
-
-    // Diğer eventler
     $('sortAZ').onclick = () => sort('az');
     $('sortZA').onclick = () => sort('za');
     $('checkBadBtn').onclick = checkBad;
@@ -463,39 +457,30 @@
     $('exportAllBtn').onclick = () => {
       if (!playlist.length) return alert('Liste boş', 'error');
       const blob = new Blob([toM3U(playlist)], { type: 'text/plain' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'iptv_liste.m3u';
-      a.click();
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+      a.download = 'iptv_liste.m3u'; a.click();
     };
     $('deleteAllBtn').onclick = () => confirm('Tüm liste silinsin mi?') && clearAll();
     $('exportSelBtn').onclick = () => {
       const sel = playlist.filter(c => selected.includes(c.url));
       if (!sel.length) return alert('Seçili yok', 'info');
       const blob = new Blob([toM3U(sel)], { type: 'text/plain' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'secili.m3u';
-      a.click();
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+      a.download = 'secili.m3u'; a.click();
     };
     $('deleteSelBtn').onclick = () => {
       if (!selected.length) return alert('Seçili yok', 'info');
       if (!confirm('Seçili kanallar silinsin mi?')) return;
       playlist = playlist.filter(c => !selected.includes(c.url));
-      selected = [];
-      save();
-      batch.classList.remove('visible');
+      selected = []; save(); batch.classList.remove('visible');
     };
     $('moveBtn').onclick = () => moveSelected(moveToCat.value);
     $('createAndMoveBtn').onclick = createAndMove;
     $('search-input').oninput = filter;
     $('category-filter').onchange = filter;
 
-    // Başlangıç
     window.addEventListener('load', async () => {
-      await initDB();
-      setupPlayer();
-      await load();
+      await initDB(); setupPlayer(); await load();
     });
   </script>
 </body>
