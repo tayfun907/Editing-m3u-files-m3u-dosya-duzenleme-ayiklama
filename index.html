@@ -1,577 +1,698 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>IPTV Liste Düzenleyici</title>
-  <link href="https://vjs.zencdn.net/8.20.0/video-js.css" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-  <script src="https://vjs.zencdn.net/8.20.0/video.min.js"></script>
-  <style>
-    :root{--bg:#2c3e50;--pri:#3498db;--sec:#ecf0f1;--acc:#f39c12;--dan:#e74c3c;--suc:#27ae60;}
-    body{font-family:Arial,sans-serif;margin:0;background:var(--bg);color:var(--sec);display:flex;height:100vh;overflow:hidden;}
-    #editor-container{flex:1;display:flex;flex-direction:column;padding:15px;overflow-y:auto;}
-    #player-area{width:350px;padding:15px;background:#34495e;border-left:2px solid #293a4a;display:flex;flex-direction:column;gap:10px;flex-shrink:0;overflow-y:auto;}
-    #player-container{width:100%;margin-bottom:10px;}
-    video.video-js{width:100%;height:200px;border-radius:6px;}
-    h1{margin:0 0 10px;font-size:24px;text-align:center;color:var(--acc);border-bottom:1px solid #34495e;padding-bottom:10px;}
-    #current-channel{font-size:16px;font-weight:bold;text-align:center;color:var(--pri);}
-    .toolbar{display:flex;gap:8px;margin-bottom:15px;align-items:center;flex-wrap:wrap;}
-    .toolbar input,.toolbar select,.toolbar button{padding:9px;border-radius:4px;border:1px solid #444;background:#444;color:var(--sec);box-sizing:border-box;}
-    .toolbar button{cursor:pointer;background:var(--pri);flex-shrink:0;}
-    .toolbar button.danger{background:var(--dan);}
-    .toolbar button.success{background:var(--suc);}
-    .toolbar button.export{background:var(--acc);color:#333;}
-    .toolbar button.select-all{background:#9b59b6;color:#fff;}
-    .toolbar button:hover{background:#2980b9;}
-    #search-input{flex:1;min-width:150px;}
-    #controls{background:#3c546b;padding:15px;border-radius:6px;margin-bottom:15px;border:2px solid var(--acc);display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
-    #controls label{font-weight:bold;flex-shrink:0;}
-    #controls input[type=file]{flex-grow:1;}
-    #controls .group{display:flex;gap:8px;align-items:center;flex:1;}
-    #start-upload{background:#2ecc71!important;color:#fff;display:none;}
-    #batch{display:none;background:#34495e;padding:10px;border-radius:6px;margin-bottom:15px;gap:10px;align-items:center;flex-wrap:wrap;}
-    #batch.visible{display:flex;}
-    #batch label{font-weight:bold;flex-shrink:0;}
-    #list{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:15px;padding-top:10px;flex-grow:1;overflow-y:auto;}
-    .card{background:#34495e;padding:15px;border-radius:6px;box-shadow:0 4px 6px rgba(0,0,0,.2);border-left:5px solid var(--pri);cursor:move;position:relative;transition:all .2s;}
-    .card.dragging{opacity:.5;transform:scale(.98);}
-    .card.selected{background:#3e5770 !important;border-left:5px solid var(--acc) !important;}
-    .card .sel{width:20px;height:20px;cursor:pointer;}
-    .card-title{font-weight:600;font-size:14px;color:var(--sec);cursor:pointer;}
-    .cat-name{font-size:12px;color:#bdc3c7;cursor:pointer;}
-    .url-text{font-size:11px;word-break:break-all;color:#95a5a6;margin-top:5px;cursor:pointer;}
-    #alert{position:fixed;top:0;left:0;right:0;padding:15px;text-align:center;color:#fff;font-weight:bold;z-index:1000;display:none;}
-    #alert.success{background:#27ae60;}
-    #alert.error{background:#c0392b;}
-    #alert.info{background:#3498db;}
-    #bad-modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.8);z-index:2000;align-items:center;justify-content:center;}
-    #bad-modal.visible{display:flex;}
-    #bad-content{max-height:70vh;overflow-y:auto;background:#2c3e50;padding:20px;border-radius:8px;max-width:600px;width:90%;}
-    .bad-item{padding:8px 0;border-bottom:1px solid #444;}
-    .bad-item:last-child{border:none;}
-    #category-filter option:checked { background: var(--acc); color: #000; }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IPTV Liste Düzenleyici</title>
+    <link href="https://vjs.zencdn.net/8.20.0/video-js.css" rel="stylesheet">
+    <script src="https://vjs.zencdn.net/8.20.0/video.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.7/shaka-player.compiled.js"></script>
 
-    @media (max-width: 768px) {
-      body { flex-direction: column; height: auto; min-height: 100vh; }
-      #editor-container { padding: 10px; }
-      #player-area { width: 100%; border-left: none; border-top: 2px solid #293a4a; padding: 10px; }
-      #player-container video { height: 220px; }
-      #list { grid-template-columns: 1fr; }
-      .toolbar, #controls { flex-direction: column; align-items: stretch; }
-      .toolbar input, .toolbar select, .toolbar button { width: 100%; margin-bottom: 8px; }
-      #controls .group { flex-direction: column; }
-      #controls input[type=file] { width: 100%; }
-      #batch { flex-direction: column; }
-      #batch input, #batch select, #batch button { width: 100%; margin-bottom: 8px; }
-    }
-  </style>
+    <style>
+        :root{--bg:#2c3e50;--pri:#3498db;--sec:#ecf0f1;--acc:#f39c12;--dan:#e74c3c;--suc:#27ae60;}
+        body{font-family:Arial,sans-serif;margin:0;background:var(--bg);color:var(--sec);display:flex;height:100vh;overflow:hidden;}
+        #editor-container{flex:1;display:flex;flex-direction:column;padding:15px;overflow-y:auto;}
+        #player-area{width:350px;padding:15px;background:#34495e;border-left:2px solid #293a4a;display:flex;flex-direction:column;gap:10px;flex-shrink:0;overflow-y:auto;}
+        #player-container{width:100%;margin-bottom:10px;}
+        video.video-js{width:100%;height:200px;border-radius:6px;}
+        h1{margin:0 0 10px;font-size:24px;text-align:center;color:var(--acc);border-bottom:1px solid #3498db;padding-bottom:10px;}
+        #current-channel{font-size:16px;font-weight:bold;text-align:center;color:var(--pri);}
+        .toolbar{display:flex;gap:8px;margin-bottom:15px;align-items:center;flex-wrap:wrap;}
+        .toolbar input,.toolbar select,.toolbar button{padding:9px;border-radius:4px;border:1px solid #444;background:#444;color:var(--sec);box-sizing:border-box;}
+        .toolbar button{cursor:pointer;background:var(--pri);flex-shrink:0;}
+        .toolbar button.danger{background:var(--dan);}
+        .toolbar button.success{background:var(--suc);}
+        .toolbar button.export{background:var(--acc);color:#333;}
+        .toolbar button.select-all{background:#9b59b6;color:#fff;}
+        .toolbar button:hover{background:#2980b9;}
+        .toolbar button:disabled{background:#555;opacity:0.6;cursor:not-allowed;}
+        #search-input{flex:1;min-width:150px;}
+        #controls{background:#3c546b;padding:15px;border-radius:6px;margin-bottom:15px;border:2px solid var(--acc);display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+        #controls label{font-weight:bold;flex-shrink:0;}
+        #controls input[type=file]{flex-grow:1;}
+        #controls .group{display:flex;gap:8px;align-items:center;flex:1;}
+        #batch{display:none;background:#34495e;padding:10px;border-radius:6px;margin-bottom:15px;gap:10px;align-items:center;flex-wrap:wrap;}
+        #batch.visible{display:flex;}
+        #batch label{font-weight:bold;flex-shrink:0;}
+        #list{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:15px;padding-top:10px;flex-grow:1;overflow-y:auto;}
+        .card{background:#34495e;padding:15px;border-radius:6px;box-shadow:0 4px 6px rgba(0,0,0,.2);border-left:5px solid var(--pri);cursor:move;position:relative;transition:all .2s;}
+        .card.dragging{opacity:.5;transform:scale(.98);}
+        .card.selected{background:#3e5770 !important;border-left:5px solid var(--acc) !important;}
+        .card .sel{width:20px;height:20px;cursor:pointer;}
+        .card-title{font-weight:600;font-size:14px;color:var(--sec);cursor:pointer;}
+        .cat-name{font-size:12px;color:#bdc3c7;cursor:pointer;}
+        .url-text{font-size:11px;word-break:break-all;color:#95a5a6;margin-top:5px;cursor:pointer;}
+        #alert{position:fixed;top:0;left:0;right:0;padding:15px;text-align:center;color:#fff;font-weight:bold;z-index:1000;display:none;}
+        #alert.success{background:#27ae60;}
+        #alert.error{background:#c0392b;}
+        #alert.info{background:#3498db;}
+        #bad-modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.8);z-index:2000;align-items:center;justify-content:center;}
+        #bad-modal.visible{display:flex;}
+        #bad-content{max-height:70vh;overflow-y:auto;background:#2c3e50;padding:20px;border-radius:8px;max-width:600px;width:90%;}
+        .bad-item{padding:8px 0;border-bottom:1px solid #444;}
+        .bad-item:last-child{border:none;}
+        #progress-container{display:none;margin:10px 0;background:#444;border-radius:4px;overflow:hidden;position:relative;height:24px;}
+        #progress-bar{width:0%;height:100%;background:var(--suc);transition:width .3s;}
+        #progress-text{position:absolute;width:100%;text-align:center;color:white;line-height:24px;font-size:12px;font-weight:bold;}
+    </style>
 </head>
 <body>
-  <div id="alert"></div>
-  <div id="bad-modal">
-    <div id="bad-content">
-      <h3 style="margin-top:0;color:var(--acc);">Çalışmayan Kanallar (<span id="bad-count">0</span>)</h3>
-      <div id="bad-items"></div>
-      <div style="margin-top:15px;text-align:right;">
-        <button class="danger" id="confirm-delete-bad">Tümünü Sil</button>
-        <button id="cancel-delete-bad">İptal</button>
-      </div>
+    <div id="alert"></div>
+    <div id="bad-modal">
+        <div id="bad-content">
+            <h3 style="margin-top:0;color:var(--acc);">Çalışmayan Kanallar (<span id="bad-count">0</span>)</h3>
+            <div id="bad-items"></div>
+            <div style="margin-top:15px;text-align:right;">
+                <button class="danger" id="confirm-delete-bad">Tümünü Sil</button>
+                <button id="cancel-delete-bad">İptal</button>
+            </div>
+        </div>
     </div>
-  </div>
-  <div id="editor-container">
-    <h1>IPTV Liste Düzenleyici</h1>
-    <div id="controls">
-      <div class="group">
-        <label for="file-upload">Dosya:</label>
-        <input type="file" id="file-upload" accept=".m3u,.m3u8">
-        <button id="start-upload">Yükle</button>
-      </div>
-      <div class="group">
-        <label for="playlist-url">URL:</label>
-        <input type="text" id="playlist-url" placeholder="https://example.com/list.m3u">
-        <button id="submitUrlBtn">URL Yükle</button>
-      </div>
-      <button class="export" id="exportAllBtn">Tümünü İndir</button>
-      <button class="danger" id="deleteAllBtn">Listeyi Sil</button>
+    <div id="editor-container">
+        <h1>IPTV Liste Düzenleyici</h1>
+        <div id="controls">
+            <div class="group">
+                <label for="file-upload">Dosya:</label>
+                <input type="file" id="file-upload" accept=".m3u,.m3u8">
+                <button id="start-upload" disabled>Yükle</button>
+            </div>
+            <div class="group">
+                <label for="playlist-url">URL:</label>
+                <input type="text" id="playlist-url" placeholder="https://example.com/list.m3u">
+                <button id="submitUrlBtn">URL Yükle</button>
+            </div>
+            <button class="export" id="exportAllBtn">Tümünü İndir</button>
+            <button class="danger" id="deleteAllBtn">Listeyi Sil</button>
+        </div>
+        <div id="progress-container"><div id="progress-bar"></div><div id="progress-text"></div></div>
+        <div class="toolbar">
+            <input type="text" id="search-input" placeholder="Kanal / Kategori ara…">
+            <select id="category-filter"><option value="all">Tüm Kategoriler</option></select>
+            <button id="sortAZ">A-Z</button>
+            <button id="sortZA">Z-A</button>
+            <button id="checkBadBtn" class="danger">Çalışmayanları Bul</button>
+            <button id="selectAllBtn" class="select-all">Tümünü Seç</button>
+            <button id="deselectAllBtn" class="select-all">Seçimleri Kaldır</button>
+        </div>
+        <div class="toolbar" id="batch">
+            <label id="sel-count">0 kanal seçili</label>
+            <select id="move-to-cat"><option value="">Kategoriye Taşı…</option></select>
+            <button id="moveBtn">Taşı</button>
+            <input type="text" id="new-cat-name" placeholder="Yeni Kategori Adı">
+            <button id="createAndMoveBtn">Oluştur & Taşı</button>
+            <button class="export" id="exportSelBtn">Seçilileri İndir</button>
+            <button class="danger" id="deleteSelBtn">Seçilileri Sil</button>
+        </div>
+        <div id="list"></div>
     </div>
-    <div class="toolbar">
-      <input type="text" id="search-input" placeholder="Kanal / Kategori ara…">
-      <select id="category-filter"><option value="all">Tüm Kategoriler</option></select>
-      <button id="sortAZ">A‑Z</button>
-      <button id="sortZA">Z‑A</button>
-      <button id="checkBadBtn" class="danger">Çalışmayanları Bul</button>
-      <button id="selectAllBtn" class="select-all">Tümünü Seç</button>
-      <button id="deselectAllBtn" class="select-all">Seçimleri Kaldır</button>
+    <div id="player-area">
+        <div id="current-channel">Oynatıcı Alanı</div>
+        <div id="player-container"><video id="player" class="video-js vjs-big-play-centered" controls preload="auto" playsinline></video></div>
     </div>
-    <div class="toolbar" id="batch">
-      <label id="sel-count">0 kanal seçili</label>
-      <select id="move-to-cat"><option value="">Kategoriye Taşı…</option></select>
-      <button id="moveBtn">Taşı</button>
-      <input type="text" id="new-cat-name" placeholder="Yeni Kategori Adı">
-      <button id="createAndMoveBtn">Oluştur & Taşı</button>
-      <button class="export" id="exportSelBtn">Seçilileri İndir</button>
-      <button class="danger" id="deleteSelBtn">Seçilileri Sil</button>
-    </div>
-    <div id="list"></div>
-  </div>
-  <div id="player-area">
-    <div id="current-channel">Oynatıcı Alanı</div>
-    <div id="player-container"><video id="player" class="video-js vjs-big-play-centered" controls preload="auto" playsinline></video></div>
-    <div id="video-resolution">Çözünürlük: Bekleniyor</div>
-  </div>
 
-  <script>
-    function $(id) { return document.getElementById(id); }
-    var db = null, playlist = [], filtered = [], selected = [], badChannels = [], hls = null, player;
-    var draggedUrl = null;
-    var currentFilter = { search: '', category: 'all' };
-    var isSaving = false;
+    <script>
+        function $(id){return document.getElementById(id);}
+        var db=null,playlist=[],filtered=[],selected=[],badChannels=[];
+        var draggedUrl=null;
+        var currentFilter={search:'',category:'all'}; 
+        var isSaving=false;
+        var vjsPlayer=null,activeHls=null,shakaPlayer=null;
+        var loadErrorTimeout=null;
+        var shakaPolyfillInstalled=false;
 
-    function sanitize(s) { return s ? String(s).trim() : ''; }
+        function sanitize(s){return s?String(s).trim():'';}
 
-    function alertMsg(msg, type, dur) {
-      if (!dur) dur = 3500;
-      var a = $('alert'); a.textContent = msg; a.className = type; a.style.display = 'block';
-      setTimeout(function() { a.style.display = 'none'; }, dur);
-    }
-
-    function parseM3U(data) {
-      if (data.charCodeAt(0) === 0xFEFF) data = data.slice(1);
-      if (data.indexOf('\uFEFF') === 0) data = data.slice(1);
-      var lines = data.split(/\r?\n/);
-      var res = [], cur = null;
-      for (var i = 0; i < lines.length; i++) {
-        var l = lines[i].trim();
-        if (!l) continue;
-        if (l.indexOf('#EXTM3U') === 0) continue;
-        if (l.indexOf('#EXTINF:') === 0) {
-          if (cur && !cur.url) cur = null;
-          var info = l.substring(8);
-          var titleMatch = info.match(/,(.*?)$/);
-          var title = titleMatch ? titleMatch[1].trim() : 'Bilinmeyen';
-          var logo = (info.match(/tvg-logo=["']([^"']*)["']/) || [])[1] || '';
-          var group = (info.match(/group-title=["']([^"']*)["']/) || [])[1] || 'Diğer';
-          var tvgName = (info.match(/tvg-name=["']([^"']*)["']/) || [])[1] || title;
-          cur = { id: Date.now() + Math.random(), title: sanitize(tvgName), logo: sanitize(logo), category: sanitize(group), url: '' };
-          continue;
+        function alertMsg(msg,type,dur){
+            if(!dur)dur=3500;
+            var a=$('alert');a.textContent=msg;a.className=type;a.style.display='block';
+            setTimeout(()=>{a.style.display='none';},dur);
         }
-        if (cur && l.indexOf('#') !== 0) {
-          var url = l.trim();
-          if (url) { cur.url = url; res.push(cur); }
-          cur = null;
+        
+        function updateProgress(percent, text){
+            $('progress-container').style.display = 'block';
+            $('progress-bar').style.width = percent + '%';
+            $('progress-text').textContent = text;
+            if(percent >= 100) setTimeout(() => $('progress-container').style.display = 'none', 500);
         }
-      }
-      return res;
-    }
+        
+        function parseM3UAsync(data, callback){
+            if(data.charCodeAt(0)===0xFEFF)data=data.slice(1);
+            const lines=data.split(/\r?\n/);
+            const totalLines=lines.length;
+            let res=[],cur=null;
+            let i=0;
+            const chunkSize=5000;
 
-    function toM3U(pl) {
-      var m = '#EXTM3U\n';
-      for (var i = 0; i < pl.length; i++) {
-        var c = pl[i];
-        m += '#EXTINF:-1 tvg-logo="' + c.logo + '" group-title="' + c.category + '",' + c.title + '\n' + c.url + '\n';
-      }
-      return m;
-    }
-
-    function initDB(callback) {
-      var r = indexedDB.open('IPTVDB', 2);
-      r.onupgradeneeded = function(e) {
-        var d = e.target.result;
-        if (!d.objectStoreNames.contains('pl')) d.createObjectStore('pl', {keyPath: 'id'});
-      };
-      r.onsuccess = function(e) { db = e.target.result; if (callback) callback(); };
-      r.onerror = function() { alertMsg('IndexedDB açılamadı!', 'error'); if (callback) callback(); };
-    }
-
-    function save(callback, retries) {
-      if (!retries) retries = 3;
-      if (!db || !playlist.length || isSaving) { if (callback) callback(); return; }
-      isSaving = true;
-      var prevFilter = { search: currentFilter.search, category: currentFilter.category };
-      var chunkSize = 100;
-      var chunks = [];
-      for (var i = 0; i < playlist.length; i += chunkSize) chunks.push(playlist.slice(i, i + chunkSize));
-      var currentChunk = 0;
-
-      function saveNext() {
-        if (currentChunk >= chunks.length) {
-          updateCats();
-          currentFilter.search = prevFilter.search;
-          currentFilter.category = prevFilter.category;
-          $('search-input').value = prevFilter.search;
-          $('category-filter').value = prevFilter.category;
-          filter();
-          updateSelection();
-          alertMsg(playlist.length + ' kanal kaydedildi.', 'success');
-          isSaving = false;
-          if (callback) callback();
-          return;
-        }
-        var tx = db.transaction('pl', 'readwrite');
-        var st = tx.objectStore('pl');
-        if (currentChunk === 0) st.clear();
-        for (var j = 0; j < chunks[currentChunk].length; j++) st.add(chunks[currentChunk][j]);
-        tx.oncomplete = function() { currentChunk++; saveNext(); };
-        tx.onerror = function() {
-          if (retries > 0) setTimeout(function() { save(callback, retries - 1); }, 1000);
-          else { alertMsg('Kaydetme hatası.', 'error'); updateCats(); filter(); updateSelection(); isSaving = false; if (callback) callback(); }
-        };
-      }
-      saveNext();
-    }
-
-    function load() {
-      if (!db) return;
-      var tx = db.transaction('pl', 'readonly');
-      var st = tx.objectStore('pl');
-      var req = st.getAll();
-      req.onsuccess = function() {
-        playlist = req.result || [];
-        updateCats();
-        currentFilter = { search: '', category: 'all' };
-        $('search-input').value = '';
-        $('category-filter').value = 'all';
-        filter();
-        updateSelection();
-      };
-    }
-
-    function clearAll() {
-      if (!db) return;
-      var tx = db.transaction('pl', 'readwrite');
-      var req = tx.objectStore('pl').clear();
-      req.onsuccess = function() { playlist = []; filtered = []; $('list').innerHTML = ''; updateCats(); alertMsg('Liste silindi.', 'info'); };
-      req.onerror = function() { alertMsg('Silme hatası.', 'error'); };
-    }
-
-    function updateCats() {
-      var cats = [];
-      for (var i = 0; i < playlist.length; i++) if (cats.indexOf(playlist[i].category) === -1) cats.push(playlist[i].category);
-      cats.sort();
-      var catFilter = $('category-filter'); catFilter.innerHTML = '<option value="all">Tüm Kategoriler</option>';
-      var moveToCat = $('move-to-cat'); moveToCat.innerHTML = '<option value="">Kategoriye Taşı…</option>';
-      for (var i = 0; i < cats.length; i++) { catFilter.appendChild(new Option(cats[i], cats[i])); moveToCat.appendChild(new Option(cats[i], cats[i])); }
-    }
-
-    function filter() {
-      var q = $('search-input').value.toLowerCase().trim();
-      var cat = $('category-filter').value;
-      currentFilter.search = q; currentFilter.category = cat;
-      filtered = [];
-      for (var i = 0; i < playlist.length; i++) {
-        var c = playlist[i];
-        if ((c.title.toLowerCase().indexOf(q) > -1 || c.url.toLowerCase().indexOf(q) > -1) && (cat === 'all' || c.category === cat)) filtered.push(c);
-      }
-      render(); updateSelection();
-    }
-
-    function render() {
-      var list = $('list'); list.innerHTML = '';
-      if (!filtered.length) { list.innerHTML = '<p style="grid-column:1/-1;text-align:center;color:#aaa;">Kanal bulunamadı.</p>'; return; }
-      for (var i = 0; i < filtered.length; i++) list.appendChild(card(filtered[i]));
-      updateSelection();
-    }
-
-    function card(ch) {
-      var d = document.createElement('div'); d.className = 'card'; d.dataset.url = ch.url; d.draggable = true;
-      d.innerHTML = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">' +
-        '<input type="checkbox" class="sel">' +
-        '<img src="' + (ch.logo || 'https://via.placeholder.com/40') + '" onerror="this.src=\'https://via.placeholder.com/40\'" width="40" height="40" style="border-radius:4px;">' +
-        '<div style="flex:1;"><div class="card-title">' + ch.title + '</div><div class="cat-name">' + ch.category + '</div></div>' +
-        '<button onclick="play(\'' + ch.url + '\')" style="padding:4px 8px;font-size:12px;background:#27ae60;color:#fff;border:none;border-radius:4px;cursor:pointer;">Oynat</button>' +
-        '</div><div class="url-text">' + ch.url + '</div>';
-      var checkbox = d.querySelector('.sel'); checkbox.checked = selected.indexOf(ch.url) > -1;
-      checkbox.onclick = function(e) { e.stopPropagation(); toggle(ch.url); };
-
-      var startEdit = function(el, field, callback) {
-        var input = document.createElement('input'); input.type = 'text'; input.value = ch[field];
-        input.style.cssText = 'width:100%;font-weight:600;font-size:14px;color:var(--sec);background:#3a546b;border:2px dashed #3498db;border-radius:3px;padding:2px 4px;outline:none;';
-        el.parentNode.replaceChild(input, el); input.focus(); input.select();
-        input.onkeydown = function(ev) { if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); } else if (ev.key === 'Escape') { input.value = ch[field]; input.blur(); } };
-        input.onblur = function() {
-          var val = sanitize(input.value); var span = document.createElement('div'); span.className = el.className; span.textContent = val || ch[field];
-          span.onclick = function(e) { e.stopPropagation(); startEdit(span, field, callback); };
-          if (val && val !== ch[field]) { ch[field] = val; if (callback) callback(); save(); }
-          input.parentNode.replaceChild(span, input);
-        };
-      };
-      d.querySelector('.card-title').onclick = function(e) { e.stopPropagation(); startEdit(this, 'title'); };
-      d.querySelector('.cat-name').onclick = function(e) { e.stopPropagation(); startEdit(this, 'category', updateCats); };
-      d.querySelector('.url-text').onclick = function(e) { e.stopPropagation(); startEdit(this, 'url'); };
-
-      d.ondragstart = function(e) { draggedUrl = ch.url; d.classList.add('dragging'); };
-      d.ondragover = function(e) { e.preventDefault(); };
-      d.ondrop = function(e) {
-        e.preventDefault();
-        if (!draggedUrl || draggedUrl === ch.url || isSaving) return;
-        var from = -1, to = -1;
-        for (var i = 0; i < playlist.length; i++) { if (playlist[i].url === draggedUrl) from = i; if (playlist[i].url === ch.url) to = i; }
-        if (from === -1 || to === -1) return;
-        var moved = playlist.splice(from, 1)[0]; playlist.splice(to, 0, moved);
-        render(); save();
-      };
-      d.ondragend = function() { d.classList.remove('dragging'); };
-      return d;
-    }
-
-    function toggle(url) { var i = selected.indexOf(url); if (i > -1) selected.splice(i, 1); else selected.push(url); updateSelection(); }
-
-    function updateSelection() {
-      $('sel-count').textContent = selected.length + ' kanal seçili';
-      $('batch').classList.toggle('visible', selected.length > 0);
-      var cards = document.querySelectorAll('.card');
-      for (var i = 0; i < cards.length; i++) {
-        var card = cards[i]; var url = card.dataset.url; var isSel = selected.indexOf(url) > -1;
-        card.classList.toggle('selected', isSel); var cb = card.querySelector('.sel'); if (cb) cb.checked = isSel;
-      }
-    }
-
-    function selectAll() { selected = filtered.map(function(c) { return c.url; }); updateSelection(); }
-    function deselectAll() { selected = []; updateSelection(); }
-
-    function sort(dir) {
-      var asc = dir === 'az';
-      playlist.sort(function(a, b) { return asc ? a.title.localeCompare(b.title) : b.title.localeCompare(a.title); });
-      save();
-    }
-
-    function checkBad() {
-      if (!playlist.length) return alertMsg('Liste boş', 'info');
-      $('checkBadBtn').disabled = true;
-      $('checkBadBtn').textContent = 'Test ediliyor…';
-      badChannels = [];
-      var total = playlist.length;
-      var checked = 0;
-
-      function testNext(index) {
-        if (index >= total) {
-          $('checkBadBtn').disabled = false;
-          $('checkBadBtn').textContent = 'Çalışmayanları Bul';
-          if (!badChannels.length) return alertMsg('Tüm kanallar çalışıyor!', 'success');
-          $('bad-count').textContent = badChannels.length;
-          $('bad-items').innerHTML = '';
-          for (var i = 0; i < badChannels.length; i++) {
-            var c = badChannels[i];
-            var div = document.createElement('div'); div.className='bad-item';
-            div.innerHTML = '<strong>' + c.title + '</strong> <small>(' + c.category + ')</small><br><code style="font-size:10px;color:#bbb;">' + c.url + '</code>';
-            $('bad-items').appendChild(div);
-          }
-          $('bad-modal').classList.add('visible');
-          return;
-        }
-
-        var url = playlist[index].url;
-        var xhr = new XMLHttpRequest();
-        xhr.open('HEAD', url, true);
-        xhr.timeout = 8000;
-        xhr.ontimeout = function() { check(url, false); };
-        xhr.onload = function() { check(url, this.status >= 200 && this.status < 400); };
-        xhr.onerror = function() { check(url, false); };
-        xhr.send();
-
-        function check(u, ok) {
-          checked++;
-          if (!ok) badChannels.push(playlist[index]);
-          $('checkBadBtn').textContent = 'Test: ' + checked + '/' + total;
-          testNext(index + 1);
-        }
-      }
-      testNext(0);
-    }
-
-    function deleteBad() {
-      var newList = [];
-      for (var i = 0; i < playlist.length; i++) {
-        var keep = true;
-        for (var j = 0; j < badChannels.length; j++) {
-          if (playlist[i].url === badChannels[j].url) { keep = false; break; }
-        }
-        if (keep) newList.push(playlist[i]);
-      }
-      playlist = newList;
-      save(function() { $('bad-modal').classList.remove('visible'); });
-    }
-
-    function moveSelected(cat) {
-      if (!selected.length) return alertMsg('Kanal seçin', 'info');
-      if (!cat) return alertMsg('Kategori seçin', 'info');
-      for (var i = 0; i < playlist.length; i++) if (selected.indexOf(playlist[i].url) > -1) playlist[i].category = cat;
-      selected = []; save();
-    }
-
-    function createAndMove() {
-      var name = $('new-cat-name').value.trim();
-      if (!name) return alertMsg('Kategori adı girin', 'error');
-      if (!selected.length) return alertMsg('Kanal seçin', 'info');
-      for (var i = 0; i < playlist.length; i++) if (selected.indexOf(playlist[i].url) > -1) playlist[i].category = name;
-      $('new-cat-name').value = ''; selected = []; save();
-    }
-
-    function setupPlayer() {
-      player = videojs($('player'), {
-        html5: { hls: { withCredentials: false } },
-        autoplay: false,
-        controls: true,
-        fluid: true,
-        playbackRates: [0.5, 1, 1.25, 1.5, 2]
-      });
-      player.on('error', function() { $('video-resolution').textContent = 'Çözünürlük: Hata'; });
-      player.on('canplay', updateResolution);
-      player.on('loadedmetadata', updateResolution);
-    }
-
-    function updateResolution() {
-      player.ready(function() {
-        var video = player.tech_.el_;
-        if (video && video.videoWidth && video.videoHeight) {
-          $('video-resolution').textContent = 'Çözünürlük: ' + video.videoWidth + 'x' + video.videoHeight;
-        } else {
-          $('video-resolution').textContent = 'Çözünürlük: Yükleniyor...';
-          setTimeout(updateResolution, 1000);
-        }
-      });
-    }
-
-    window.play = function(url) {
-      var ch = null;
-      for (var i = 0; i < playlist.length; i++) {
-        if (playlist[i].url === url) { ch = playlist[i]; break; }
-      }
-      if (!ch) return;
-
-      $('current-channel').textContent = ch.title;
-      $('video-resolution').textContent = 'Çözünürlük: Yükleniyor...';
-
-      if (hls) { hls.destroy(); hls = null; }
-
-      player.ready(function() {
-        player.reset();
-
-        if (Hls.isSupported() && (url.indexOf('.m3u8') > -1 || url.toLowerCase().indexOf('m3u8') > -1)) {
-          hls = new Hls({ enableWorker: true });
-          hls.loadSource(url);
-          hls.attachMedia(player.tech_.el_);
-
-          hls.on(Hls.Events.MANIFEST_PARSED, function() {
-            tryPlay();
-          });
-
-          hls.on(Hls.Events.ERROR, function(event, data) {
-            if (data.fatal) {
-              alertMsg('HLS hatası, MP4 deneniyor...', 'info');
-              fallbackToMP4(url);
+            function processChunk(){
+                const end=Math.min(i+chunkSize, totalLines);
+                for(;i<end;i++){
+                    const l=lines[i].trim();
+                    if(!l||l.startsWith('#EXTM3U'))continue;
+                    
+                    if(l.startsWith('#EXTINF:')){
+                        if(cur && !cur.url)cur=null;
+                        const info=l.substring(8);
+                        const titleMatch=info.match(/,(.*?)$/);
+                        const title=titleMatch?titleMatch[1].trim():'Bilinmeyen';
+                        const logo=(info.match(/tvg-logo=["']([^"']*)["']/)||[])[1]||'';
+                        const group=(info.match(/group-title=["']([^"']*)["']/)||[])[1]||'Diğer';
+                        const tvgName=(info.match(/tvg-name=["']([^"']*)["']/)||[])[1]||title;
+                        const uniqueId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+                        cur={id:uniqueId,title:sanitize(tvgName),logo:sanitize(logo),category:sanitize(group),url:''};
+                        continue;
+                    }
+                    if(cur && l[0]!=='#'){
+                        const url=l.trim();
+                        if(url){cur.url=url;res.push(cur);}
+                        cur=null;
+                    }
+                }
+                const percent=Math.round((i/totalLines)*100);
+                updateProgress(percent, `Ayrıştırılıyor: ${percent}% (${res.length} kanal bulundu)`);
+                if(i<totalLines){
+                    setTimeout(processChunk, 0);
+                }else{
+                    callback(res);
+                }
             }
-          });
-
-        } else {
-          fallbackToMP4(url);
+            updateProgress(0, 'Ayrıştırma Başlatılıyor...');
+            processChunk();
         }
-      });
-    };
 
-    function tryPlay() {
-      var playPromise = player.play();
-      if (playPromise !== undefined) {
-        playPromise.then(function() {}).catch(function() {
-          alertMsg('Oynatma için lütfen oynat tuşuna basın.', 'info', 5000);
-        });
-      }
-    }
+        function toM3U(pl){
+            var m='#EXTM3U\n';
+            for(var i=0;i<pl.length;i++){
+                var c=pl[i];
+                m+='#EXTINF:-1 tvg-logo="'+c.logo+'" group-title="'+c.category+'",'+c.title+'\n'+c.url+'\n';
+            }
+            return m;
+        }
 
-    function fallbackToMP4(url) {
-      player.src({ src: url, type: 'video/mp4' });
-      tryPlay();
-    }
+        function initDB(callback){
+            var r=indexedDB.open('IPTVDB',2);
+            r.onupgradeneeded=e=>{
+                var d=e.target.result;
+                if(!d.objectStoreNames.contains('pl'))d.createObjectStore('pl',{keyPath:'id'});
+            };
+            r.onsuccess=e=>{db=e.target.result;if(callback)callback();};
+            r.onerror=()=>{alertMsg('IndexedDB açılamadı!','error');if(callback)callback();};
+        }
 
-    $('file-upload').onchange = function() {
-      var file = this.files[0];
-      if (!file) { $('start-upload').style.display = 'none'; return; }
-      var ext = file.name.split('.').pop().toLowerCase();
-      if (['m3u', 'm3u8'].indexOf(ext) === -1) { alertMsg('Lütfen .m3u veya .m3u8 dosyası seçin!', 'error'); this.value = ''; $('start-upload').style.display = 'none'; return; }
-      $('start-upload').style.display = 'inline-block';
-      $('start-upload').textContent = file.name + ' → Yükle';
-    };
+        function load(){
+            if(!db)return;
+            var tx = db.transaction('pl', 'readonly');
+            var st = tx.objectStore('pl');
+            var req = st.getAll();
+            req.onsuccess = function() {
+                playlist = req.result || [];
+                updateCats();
+                currentFilter = { search: $('search-input').value.trim(), category: $('category-filter').value };
+                filter();
+                updateSelection();
+            };
+        }
 
-    $('start-upload').onclick = function() {
-      var file = $('file-upload').files[0];
-      if (!file) return;
-      this.disabled = true;
-      this.textContent = 'Yükleniyor...';
-      var reader = new FileReader();
-      reader.onload = function(e) {
-        var data = e.target.result;
-        if (!data.trim()) { alertMsg('Dosya boş', 'error'); return done(); }
-        var parsed = parseM3U(data);
-        if (!parsed.length) { alertMsg('Hiç kanal bulunamadı', 'error'); return done(); }
-        if (parsed.length > 500 && !confirm(parsed.length + ' kanal. Yüklemek uzun sürebilir, devam?')) return done();
-        playlist = parsed;
-        save(function() { alertMsg(parsed.length + ' kanal yüklendi!', 'success'); done(); });
-      };
-      reader.onerror = function() { alertMsg('Dosya okunamadı', 'error'); done(); };
-      reader.readAsText(file, 'UTF-8');
-      function done() { $('file-upload').value = ''; $('start-upload').style.display = 'none'; $('start-upload').disabled = false; $('start-upload').textContent = 'Yükle'; }
-    };
+        function save(callback,retries){
+            if(!retries)retries=3;
+            if(!db||isSaving){if(callback)callback();return;}
+            isSaving=true;
+            var total=playlist.length;
+            var chunkSize=50;
+            var chunks=[];
+            for(var i=0;i<total;i+=chunkSize)chunks.push(playlist.slice(i,i+chunkSize));
+            var currentChunk=0;
+            var processed=0;
+            
+            function updateSaveProgress(){
+                var percent=Math.round((processed/total)*100);
+                updateProgress(percent, processed+' / '+total+' kanal kaydediliyor... ('+percent+'%)');
+            }
+            
+            function saveNext(){
+                if(currentChunk>=chunks.length){
+                    isSaving=false;
+                    updateProgress(100, 'Kaydetme Tamamlandı.');
+                    updateCats();
+                    filter(); 
+                    if(total > 0 && playlist.length > 0) alertMsg(playlist.length+' kanal kaydedildi.','success');
+                    if(total == 0) alertMsg('Liste temizlendi.','info');
+                    if(callback)callback();
+                    return;
+                }
+                var tx=db.transaction('pl','readwrite');
+                var st=tx.objectStore('pl');
+                
+                if(currentChunk===0)st.clear();
+                
+                for(var j=0;j<chunks[currentChunk].length;j++)st.add(chunks[currentChunk][j]);
+                
+                tx.oncomplete=()=>{
+                    processed+=chunks[currentChunk].length;
+                    currentChunk++;
+                    updateSaveProgress();
+                    setTimeout(saveNext,0); 
+                };
+                tx.onerror=()=>{
+                    if(retries>0)setTimeout(()=>{save(callback,retries-1);},1000);
+                    else{
+                        updateProgress(0, '');
+                        alertMsg('Kaydetme hatası.','error');
+                        isSaving=false;
+                        if(callback)callback();
+                    }
+                };
+            }
+            updateSaveProgress();
+            saveNext();
+        }
 
-    $('submitUrlBtn').onclick = function() {
-      var url = $('playlist-url').value.trim();
-      if (!url) return alertMsg('URL girin', 'error');
-      if (!/^https?:\/\//i.test(url)) return alertMsg('Sadece HTTP/HTTPS URL!', 'error');
-      alertMsg('URL yükleniyor...', 'info');
-      var xhr = new XMLHttpRequest();
-      xhr.open('GET', url, true);
-      xhr.onload = function() {
-        if (this.status >= 200 && this.status < 400) {
-          var parsed = parseM3U(this.responseText);
-          if (!parsed.length) return alertMsg('Kanal yok', 'error');
-          if (parsed.length > 500 && !confirm(parsed.length + ' kanal. Devam?')) return;
-          playlist = parsed;
-          save(function() { $('playlist-url').value = ''; });
-        } else alertMsg('Bağlantı hatası: ' + this.status, 'error');
-      };
-      xhr.onerror = function() { alertMsg('Ağ hatası', 'error'); };
-      xhr.send();
-    };
+        function clearAll(){
+            if(!db)return;
+            var tx=db.transaction('pl','readwrite');
+            var req=tx.objectStore('pl').clear();
+            req.onsuccess=()=>{playlist=[];filtered=[];$('list').innerHTML='';updateCats();alertMsg('Liste silindi.','info');};
+            req.onerror=()=>{alertMsg('Silme hatası.','error');};
+        }
+        function updateCats(){
+            var cats=[];
+            for(var i=0;i<playlist.length;i++)if(cats.indexOf(playlist[i].category)===-1)cats.push(playlist[i].category);
+            cats.sort();
+            var catFilter=$('category-filter');
+            var selectedCat = catFilter.value; 
+            
+            catFilter.innerHTML='<option value="all">Tüm Kategoriler</option>';
+            var moveToCat=$('move-to-cat');moveToCat.innerHTML='<option value="">Kategoriye Taşı…</option>';
+            for(var i=0;i<cats.length;i++){
+                catFilter.appendChild(new Option(cats[i],cats[i]));
+                moveToCat.appendChild(new Option(cats[i],cats[i]));
+            }
+            if (currentFilter.category && (cats.indexOf(currentFilter.category) > -1 || currentFilter.category === 'all')) {
+                catFilter.value = currentFilter.category;
+            } else if (cats.indexOf(selectedCat) > -1 || selectedCat === 'all') {
+                 catFilter.value = selectedCat;
+            } else {
+                catFilter.value = 'all';
+            }
+            currentFilter.category = catFilter.value; 
+        }
+        function filter(){
+            var q=$('search-input').value.toLowerCase().trim();
+            var cat=$('category-filter').value;
+            currentFilter.search=q;
+            currentFilter.category=cat;
 
-    $('selectAllBtn').onclick = selectAll;
-    $('deselectAllBtn').onclick = deselectAll;
-    $('sortAZ').onclick = function() { sort('az'); };
-    $('sortZA').onclick = function() { sort('za'); };
-    $('checkBadBtn').onclick = checkBad;
-    $('confirm-delete-bad').onclick = deleteBad;
-    $('cancel-delete-bad').onclick = function() { $('bad-modal').classList.remove('visible'); };
-    $('exportAllBtn').onclick = function() {
-      if (!playlist.length) return alertMsg('Liste boş', 'error');
-      var blob = new Blob([toM3U(playlist)], { type: 'text/plain' });
-      var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'iptv_liste.m3u'; a.click();
-    };
-    $('deleteAllBtn').onclick = function() { if (confirm('Tüm liste silinsin mi?')) clearAll(); };
-    $('exportSelBtn').onclick = function() {
-      var sel = [];
-      for (var i = 0; i < playlist.length; i++) if (selected.indexOf(playlist[i].url) > -1) sel.push(playlist[i]);
-      if (!sel.length) return alertMsg('Seçili yok', 'info');
-      var blob = new Blob([toM3U(sel)], { type: 'text/plain' });
-      var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'secili.m3u'; a.click();
-    };
-    $('deleteSelBtn').onclick = function() {
-      if (!selected.length) return alertMsg('Seçili yok', 'info');
-      if (!confirm('Seçili kanallar silinsin mi?')) return;
-      var newList = [];
-      for (var i = 0; i < playlist.length; i++) if (selected.indexOf(playlist[i].url) === -1) newList.push(playlist[i]);
-      playlist = newList; selected = [];
-      save(function() { $('batch').classList.remove('visible'); });
-    };
-    $('moveBtn').onclick = function() { moveSelected($('move-to-cat').value); };
-    $('createAndMoveBtn').onclick = createAndMove;
-    $('search-input').oninput = filter;
-    $('category-filter').onchange = filter;
+            filtered=[];
+            for(var i=0;i<playlist.length;i++){
+                var c=playlist[i];
+                if((c.title.toLowerCase().indexOf(q)>-1||c.url.toLowerCase().indexOf(q)>-1)&&(cat==='all'||c.category===cat))filtered.push(c);
+            }
+            render();updateSelection();
+        }
+        function render(){
+            var list=$('list');list.innerHTML='';
+            if(!filtered.length){list.innerHTML='<p style="grid-column:1/-1;text-align:center;color:#aaa;">Kanal bulunamadı.</p>';return;}
+            for(var i=0;i<filtered.length;i++)list.appendChild(card(filtered[i]));
+            updateSelection();
+        }
+        
+        // GÜVENLİK İYİLEŞTİRMESİ: XSS Riskini tamamen ortadan kaldırmak için DOM oluşturma yöntemi
+        function card(ch){
+            var d=document.createElement('div');d.className='card';d.dataset.url=ch.url;d.draggable=true;
+            
+            var cardContent = document.createElement('div');
+            cardContent.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:8px;';
+            
+            var checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.className='sel';
+            
+            var img=document.createElement('img');img.width='40';img.height='40';img.style.borderRadius='4px';
+            img.src=ch.logo||'https://via.placeholder.com/40';
+            img.onerror=function(){this.src='https://via.placeholder.com/40';};
+            
+            var infoDiv=document.createElement('div');infoDiv.style.flex='1';
+            
+            var titleDiv=document.createElement('div');titleDiv.className='card-title';
+            titleDiv.textContent=ch.title; // Kullanıcı verisi salt metin olarak eklendi
+            
+            var catDiv=document.createElement('div');catDiv.className='cat-name';
+            catDiv.textContent=ch.category; // Kullanıcı verisi salt metin olarak eklendi
+            
+            infoDiv.appendChild(titleDiv);infoDiv.appendChild(catDiv);
+            
+            var playBtn=document.createElement('button');
+            playBtn.textContent='Oynat';
+            playBtn.style.cssText='padding:4px 8px;font-size:12px;background:#27ae60;color:#fff;border:none;border-radius:4px;cursor:pointer;';
+            playBtn.onclick=()=>play(ch.url);
+            
+            var urlTextDiv=document.createElement('div');urlTextDiv.className='url-text';
+            urlTextDiv.textContent=ch.url; // Kullanıcı verisi salt metin olarak eklendi
 
-    window.onload = function() {
-      initDB(function() {
-        setupPlayer();
-        load();
-      });
-    };
-  </script>
+            cardContent.appendChild(checkbox);
+            cardContent.appendChild(img);
+            cardContent.appendChild(infoDiv);
+            cardContent.appendChild(playBtn);
+
+            d.appendChild(cardContent);
+            d.appendChild(urlTextDiv);
+
+
+            checkbox.checked=selected.indexOf(ch.url)>-1;
+            checkbox.onclick=e=>{e.stopPropagation();toggle(ch.url);};
+            
+            var startEdit=(el,field,cb)=>{
+                var input=document.createElement('input');input.type='text';input.value=ch[field];
+                input.style.cssText='width:100%;font-weight:600;font-size:14px;color:var(--sec);background:#3a546b;border:2px dashed #3498db;border-radius:3px;padding:2px 4px;outline:none;';
+                el.parentNode.replaceChild(input,el);input.focus();input.select();
+                input.onkeydown=ev=>{if(ev.key==='Enter'){ev.preventDefault();input.blur();}else if(ev.key==='Escape'){input.value=ch[field];input.blur();}};
+                input.onblur=()=>{
+                    var val=sanitize(input.value);var span=document.createElement('div');span.className=el.className;span.textContent=val||ch[field];
+                    span.onclick=e=>{e.stopPropagation();startEdit(span,field,cb);};
+                    if(val&&val!==ch[field]){ch[field]=val;if(cb)cb();save();}
+                    input.parentNode.replaceChild(span,input);
+                };
+            };
+            titleDiv.onclick=e=>{e.stopPropagation();startEdit(titleDiv,'title');};
+            catDiv.onclick=e=>{e.stopPropagation();startEdit(catDiv,'category',updateCats);};
+            urlTextDiv.onclick=e=>{e.stopPropagation();startEdit(urlTextDiv,'url');};
+            d.ondragstart=e=>{draggedUrl=ch.url;d.classList.add('dragging');};
+            d.ondragover=e=>e.preventDefault();
+            d.ondrop=e=>{
+                e.preventDefault();
+                if(!draggedUrl||draggedUrl===ch.url||isSaving)return;
+                var fromIndex=-1,toIndex=-1;
+                for(var i=0;i<playlist.length;i++){
+                    if(playlist[i].url===draggedUrl)fromIndex=i;
+                    if(playlist[i].url===ch.url)toIndex=i;
+                }
+                if(fromIndex===-1||toIndex===-1)return;
+                var moved=playlist.splice(fromIndex,1)[0];
+                playlist.splice(toIndex,0,moved);
+                save(); 
+            };
+            d.ondragend=()=>{d.classList.remove('dragging');};
+            return d;
+        }
+        function toggle(url){var i=selected.indexOf(url);if(i>-1)selected.splice(i,1);else selected.push(url);updateSelection();}
+        function updateSelection(){
+            $('sel-count').textContent=selected.length+' kanal seçili';
+            $('batch').classList.toggle('visible',selected.length>0);
+            var cards=document.querySelectorAll('.card');
+            for(var i=0;i<cards.length;i++){
+                var card=cards[i];var url=card.dataset.url;var isSel=selected.indexOf(url)>-1;
+                card.classList.toggle('selected',isSel);var cb=card.querySelector('.sel');if(cb)cb.checked=isSel;
+            }
+        }
+        function selectAll(){selected=filtered.map(c=>c.url);updateSelection();}
+        function deselectAll(){selected=[];updateSelection();}
+        function sort(dir){
+            var asc=dir==='az';
+            playlist.sort((a,b)=>asc?a.title.localeCompare(b.title):b.title.localeCompare(a.title));
+            save();
+        }
+        function checkBad(){
+            if(!playlist.length)return alertMsg('Liste boş','info');
+            $('checkBadBtn').disabled=true;
+            $('checkBadBtn').textContent='Test ediliyor…';
+            badChannels=[];
+            var total=playlist.length;
+            var checked=0;
+            function testNext(index){
+                if(index>=total){
+                    $('checkBadBtn').disabled=false;
+                    $('checkBadBtn').textContent='Çalışmayanları Bul';
+                    if(!badChannels.length)return alertMsg('Tüm kanallar çalışıyor!','success');
+                    $('bad-count').textContent=badChannels.length;
+                    $('bad-items').innerHTML='';
+                    for(var i=0;i<badChannels.length;i++){
+                        var c=badChannels[i];
+                        var div=document.createElement('div');div.className='bad-item';
+                        // GÜVENLİK İYİLEŞTİRMESİ: innerHTML yerine textContent kullanılıyor
+                        var strong = document.createElement('strong'); strong.textContent = c.title;
+                        var small = document.createElement('small'); small.textContent = ' (' + c.category + ')';
+                        var code = document.createElement('code'); code.textContent = c.url;
+                        code.style.cssText = 'font-size:10px;color:#bbb;';
+
+                        div.appendChild(strong);
+                        div.appendChild(small);
+                        div.appendChild(document.createElement('br'));
+                        div.appendChild(code);
+                        
+                        $('bad-items').appendChild(div);
+                    }
+                    $('bad-modal').classList.add('visible');
+                    return;
+                }
+                var url = playlist[index].url;
+                var xhr = new XMLHttpRequest();
+                xhr.open('HEAD', url, true);
+                xhr.timeout = 8000;
+                xhr.ontimeout = function() { check(url, false); };
+                xhr.onload = function() { check(url, this.status >= 200 && this.status < 400); };
+                xhr.onerror = function() { check(url, false); };
+                try { xhr.send(); } catch (e) { check(url, false); }
+                function check(u, ok) {
+                    checked++;
+                    if (!ok) badChannels.push(playlist[index]);
+                    $('checkBadBtn').textContent = 'Test: ' + checked + '/' + total;
+                    testNext(index + 1);
+                }
+            }
+            testNext(0);
+        }
+        function deleteBad(){
+            var newList=[];
+            for(var i=0;i<playlist.length;i++){
+                var keep=true;
+                for(var j=0;j<badChannels.length;j++){
+                    if(playlist[i].url===badChannels[j].url){keep=false;break;}
+                }
+                if(keep)newList.push(playlist[i]);
+            }
+            playlist=newList;
+            save(()=>{ $('bad-modal').classList.remove('visible'); filter(); });
+        }
+        function moveSelected(cat){
+            if(!selected.length)return alertMsg('Kanal seçin','info');
+            if(!cat)return alertMsg('Kategori seçin','info');
+            for(var i=0;i<playlist.length;i++)if(selected.indexOf(playlist[i].url)>-1)playlist[i].category=cat;
+            selected=[];
+            save();
+        }
+        function createAndMove(){
+            var name=$('new-cat-name').value.trim();
+            if(!name)return alertMsg('Kategori adı girin','error');
+            if(!selected.length)return alertMsg('Kanal seçin','info');
+            for(var i=0;i<playlist.length;i++)if(selected.indexOf(playlist[i].url)>-1)playlist[i].category=name;
+            $('new-cat-name').value='';selected=[];
+            save();
+        }
+
+        function setupPlayer(){
+            vjsPlayer=videojs($('player'),{
+                fluid:true,controls:true,controlBar:{volumePanel:{inline:false}},
+                html5:{nativeVideoTracks:false,nativeAudioTracks:false,nativeTextTracks:false} 
+            });
+            vjsPlayer.on('error', function() {
+                var error = vjsPlayer.error();
+                if (error) {alertMsg('Oynatıcı Hatası: ' + error.message + ' (Kodu: ' + error.code + ')', 'error', 7000);}
+            });
+        }
+        
+        function playDash(url){
+             if(typeof shaka === 'undefined') { alertMsg('Shaka Player yüklenmedi.', 'error'); return; }
+            if(!shakaPolyfillInstalled){shaka.polyfill.installAll();shakaPolyfillInstalled=true;}
+            vjsPlayer.reset();
+            if(shakaPlayer){shakaPlayer.destroy().catch(()=>{});shakaPlayer=null;} 
+            const videoElement = $('player');
+            shakaPlayer=new shaka.Player(videoElement);
+            shakaPlayer.addEventListener('error',e=>{
+                alertMsg('DASH oynatılamadı. Hata: ' + (e.detail.code || 'Bilinmiyor'),'error',5000);
+            });
+            shakaPlayer.load(url).then(()=>{
+                vjsPlayer.play().catch(e=>{});
+            }).catch(e=>{
+                alertMsg('Shaka yüklemesi başarısız. Stream formatını kontrol edin.','error',5000);
+            });
+        }
+
+        function playHls(url){
+            if(!Hls.isSupported()) { 
+                vjsPlayer.src({ src: url, type: 'application/vnd.apple.mpegurl' }); 
+                vjsPlayer.play().catch(()=>{});
+                return;
+            }
+            if(activeHls)activeHls.destroy();
+            vjsPlayer.reset();
+            activeHls=new Hls();
+            activeHls.loadSource(url);
+            activeHls.attachMedia($('player'));
+            vjsPlayer.src({ src: url, type: 'application/vnd.apple.mpegurl' });
+            activeHls.on(Hls.Events.ERROR,(e,d)=>{
+                if(d.fatal)alertMsg('HLS oynatılamadı. Hata: ' + (d.response?.code || 'Bilinmiyor'),'error',5000);
+            });
+            vjsPlayer.ready(() => {
+                vjsPlayer.play().catch(e=>{});
+            });
+        }
+
+        window.play=function(url){
+            var ch=playlist.find(c=>c.url===url);
+            if(!ch)return;
+            $('current-channel').textContent=ch.title;
+            if(activeHls){activeHls.destroy();activeHls=null;}
+            if(shakaPlayer){shakaPlayer.destroy().catch(()=>{});shakaPlayer=null;}
+            vjsPlayer.reset();
+
+            clearTimeout(loadErrorTimeout);
+            loadErrorTimeout=setTimeout(()=>{if($('player').readyState<3)alertMsg(ch.title+': Yüklenemedi. (10s zaman aşımı)','error',5000);},10000);
+            
+            const lowerUrl = url.toLowerCase();
+            const isHls = /\.(m3u8?|ts|txt)(\?.*)?$/i.test(lowerUrl) || /m3u8|playlist/i.test(lowerUrl);
+            const isDash=/\.(mpd|m4s)(\?.*)?$/i.test(lowerUrl)||/mpd|dash|manifest/i.test(lowerUrl);
+            
+            if(isDash) {
+                playDash(url);
+            } else if(isHls) {
+                playHls(url);
+            } else {
+                vjsPlayer.src([{ src: url, type: 'video/mp4' }, { src: url, type: 'application/x-mpegURL' }]); 
+                vjsPlayer.ready(()=>{
+                    vjsPlayer.load();
+                    vjsPlayer.play().catch(e=>{});
+                });
+            }
+        };
+
+        window.onload = function() {
+            initDB(() => {
+                setupPlayer();
+                load();
+                
+                $('file-upload').onchange = function() {
+                    var file = this.files[0];
+                    var btn = $('start-upload');
+                    if (!file) { btn.disabled = true; btn.textContent = 'Yükle'; return; }
+                    var ext = file.name.split('.').pop().toLowerCase(); 
+                    if (['m3u', 'm3u8'].indexOf(ext) === -1) { 
+                        alertMsg('Lütfen sadece .m3u veya .m3u8 dosyası seçin!', 'error');
+                        this.value = ''; btn.disabled = true; btn.textContent = 'Yükle'; return;
+                    }
+                    btn.disabled = false;
+                    btn.textContent = file.name + ' → Yükle';
+                };
+
+                $('start-upload').onclick = function() {
+                    if (this.disabled) return;
+                    var file = $('file-upload').files[0];
+                    if (!file) return;
+                    this.disabled = true;
+                    this.textContent = 'Dosya Okunuyor...';
+                    
+                    var reader = new FileReader();
+                    reader.onload = function(e) {
+                        var data = e.target.result;
+                        if (!data.trim()) { alertMsg('Dosya boş', 'error'); done(); return; }
+                        
+                        parseM3UAsync(data, (parsed) => {
+                            if (!parsed.length) { alertMsg('Hiç kanal bulunamadı', 'error'); done(); return; }
+                            if (parsed.length > 500 && !confirm(parsed.length + ' kanal bulundu. Devam?')) { done(); return; }
+                            playlist = parsed;
+                            save(() => { done(); });
+                        });
+                    };
+                    reader.onerror = () => { alertMsg('Dosya okunamadı', 'error'); done(); };
+                    reader.readAsText(file, 'UTF-8');
+                    
+                    function done() {
+                        $('file-upload').value = '';
+                        $('start-upload').disabled = true;
+                        $('start-upload').textContent = 'Yükle';
+                        updateProgress(0, '');
+                    }
+                };
+
+                $('submitUrlBtn').onclick = async function() {
+                    var url = $('playlist-url').value.trim();
+                    if (!url) return alertMsg('URL girin', 'error');
+                    if (!/^https?:\/\//i.test(url)) return alertMsg('Sadece HTTP/HTTPS URL!', 'error');
+                    
+                    alertMsg('URL doğrudan indirilmeye çalışılıyor... Lütfen bekleyin.', 'info', 5000);
+                    this.disabled = true;
+                    
+                    const timeoutMs = 60000;
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+                    try {
+                        updateProgress(10, 'URL İndiriliyor...');
+                        const response = await fetch(url, { signal: controller.signal });
+                        clearTimeout(timeoutId);
+                        if (!response.ok) throw new Error('HTTP ' + response.status + ' - Sunucu hatası veya dosya bulunamadı.');
+                        
+                        updateProgress(30, 'Veri Alındı, İşleniyor...');
+                        const text = await response.text();
+                        
+                        await new Promise((resolve, reject) => {
+                            parseM3UAsync(text, (parsed) => {
+                                if (!parsed.length) return reject(new Error('Kanal bulunamadı (Geçersiz M3U formatı?)'));
+                                if (parsed.length > 500 && !confirm(parsed.length + ' kanal bulundu. Devam edilsin mi?')) return reject(new Error('İptal edildi'));
+                                playlist = parsed;
+                                resolve();
+                            });
+                        });
+                        await new Promise((resolve) => save(resolve));
+
+                        $('playlist-url').value = '';
+                        alertMsg(playlist.length + ' kanal yüklendi!', 'success');
+                    } catch (err) {
+                        let errorMsg = err.message || 'Bilinmeyen hata';
+                        if (err.name === 'AbortError') {
+                            errorMsg = 'Yükleme zaman aşımına uğradı (60 saniye).';
+                        } else if (err.message.includes('CORS') || err.message.includes('fetch') || err.message.includes('network')) {
+                            errorMsg = 'URL YÜKLENEMEDİ: Muhtemelen CORS hatası.';
+                        }
+                        alertMsg('URL yüklenemedi: ' + errorMsg, 'error', 10000);
+                        updateProgress(0, '');
+                    } finally {
+                        this.disabled = false;
+                    }
+                };
+                
+                $('selectAllBtn').onclick = selectAll;
+                $('deselectAllBtn').onclick = deselectAll;
+                $('sortAZ').onclick = () => sort('az');
+                $('sortZA').onclick = () => sort('za');
+                $('checkBadBtn').onclick = checkBad;
+                $('confirm-delete-bad').onclick = deleteBad;
+                $('cancel-delete-bad').onclick = () => $('bad-modal').classList.remove('visible');
+                $('exportAllBtn').onclick = function() {
+                    if (!playlist.length) return alertMsg('Liste boş', 'error');
+                    var blob = new Blob([toM3U(playlist)], { type: 'text/plain' });
+                    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'iptv_liste.m3u'; a.click();
+                };
+                $('deleteAllBtn').onclick = () => { if (confirm('Tüm liste silinsin mi?')) clearAll(); };
+                $('exportSelBtn').onclick = function() {
+                    var sel = [];
+                    for (var i = 0; i < playlist.length; i++) if (selected.indexOf(playlist[i].url) > -1) sel.push(playlist[i]);
+                    if (!sel.length) return alertMsg('Seçili yok', 'info');
+                    var blob = new Blob([toM3U(sel)], { type: 'text/plain' });
+                    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'secili.m3u'; a.click();
+                };
+                $('deleteSelBtn').onclick = function() {
+                    if (!selected.length) return alertMsg('Seçili yok', 'info');
+                    if (!confirm('Seçili kanallar silinsin mi?')) return;
+                    var newList = [];
+                    for (var i = 0; i < playlist.length; i++) if (selected.indexOf(playlist[i].url) === -1) newList.push(playlist[i]);
+                    playlist = newList; selected = [];
+                    save(() => $('batch').classList.remove('visible'));
+                };
+                $('moveBtn').onclick = () => moveSelected($('move-to-cat').value);
+                $('createAndMoveBtn').onclick = createAndMove;
+                
+                $('search-input').oninput = filter;
+                $('category-filter').onchange = filter;
+            });
+        };
+    </script>
 </body>
 </html>
